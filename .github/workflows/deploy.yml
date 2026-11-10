@@ -40,9 +40,15 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Empty for the user site (https://never87.github.io/).
-          # Set this only when deploying to a project site, e.g. VITE_BASE_PATH=/repo-name/
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH }}
+          # This repository is a GitHub *Project* Pages site, served from
+          # https://never87.github.io/Never87NovelStudio/ . Vite must emit asset
+          # URLs under that sub-path, otherwise the deployed page loads no CSS
+          # or JS and renders a blank screen.
+          #
+          # Must stay identical to the repository name. Change this (or point it
+          # at a repository variable) only if the site moves to a different
+          # sub-path or to a user site, where it must be '/'.
+          VITE_BASE_PATH: /Never87NovelStudio/
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
