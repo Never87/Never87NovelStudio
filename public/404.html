@@ -1,0 +1,73 @@
+    <script>
+      /*
+       * GitHub Pages SPA fallback (404.html).
+       * ---------------------------------------------------------------
+       * GitHub Pages serves this file for any path that does not match a real
+       * file. WITHOUT a fix, a deep link such as /novel/characters would show
+       * this page instead of the app (and a hard refresh would 404).
+       *
+       * What the app owns depends on the configured base:
+       *
+       *   base = '/'          -> the app owns the whole origin.
+       *   base = '/<repo>/'   -> the app owns one first-level directory.
+       *
+       * __N87_BASE__ is injected at build time (scripts/inject-fallback.mjs)
+       * so this file always matches vite.config.ts instead of guessing from
+       * the URL. We rewrite to `<base>?p=<path-relative-to-base>` and let the
+       * boot script in index.html restore it via history.replaceState. That
+       * keeps createBrowserRouter on real URLs (no HashRouter) and preserves
+       * the exact URL requested, including query and hash.
+       */
+      (function () {
+        // Replaced with the real base by scripts/inject-fallback.mjs at build
+        // time. Defaults to '/' so the file is also correct standalone.
+        var BASE = '__N87_BASE__';
+
+        try {
+          var l = window.location;
+
+          // The path GitHub Pages asked for, minus a trailing 404.html.
+          var pathname = l.pathname;
+          if (/\/404\.html$/.test(pathname)) {
+            pathname = pathname.slice(0, -'404.html'.length) || '/';
+          }
+
+          // Path relative to the app base (something inside the base is ours).
+          var relative =
+            pathname.indexOf(BASE) === 0
+              ? pathname.slice(BASE.length)
+              : pathname.replace(/^\//, '');
+
+          // Already the app root? Nothing to restore.
+          if (relative === '' || relative === '/') {
+            l.replace(BASE);
+            return;
+          }
+
+          var search = l.search.replace(/^\?/, '');
+          var hash = l.hash.replace(/^#/, '');
+          var target = BASE + '?p=' + encodeURIComponent(relative);
+          if (search) target += '&q=' + encodeURIComponent(search);
+          if (hash) target += '&h=' + encodeURIComponent(hash);
+
+          l.replace(target);
+        } catch (e) {
+          // Worst case: land on the app root rather than a dead end.
+          try {
+            window.location.replace(BASE === '__N87_BASE__' ? '/' : BASE);
+          } catch (ignored) {
+            /* nothing else we can do */
+          }
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div style="font-family: system-ui, -apple-system, sans-serif; padding: 2rem; color: #1a2233">
+      <p>Opening <strong>Never87 Novel Studio</strong>…</p>
+      <p style="font-size: 0.875rem; color: #5b6478">
+        If you are not redirected, <a href="/" id="n87-fallback-link">continue to the app</a>.
+      </p>
+    </div>
+  </body>
+</html>

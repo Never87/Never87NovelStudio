@@ -1,0 +1,234 @@
+@import 'tailwindcss';
+
+/*
+ * Never87 Novel Studio — Design Tokens
+ * -----------------------------------
+ * Tailwind v4 configuration lives in CSS. Every colour used by the product is
+ * declared here as a semantic token so that light/dark mode and future themes
+ * (e.g. high-contrast, sepia) only need to remap these variables.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    'Inter', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui,
+    -apple-system, sans-serif;
+  --font-serif: 'Source Han Serif SC', 'Noto Serif SC', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* Surfaces */
+    --n87-bg: #f4f5f7;
+    --n87-bg-subtle: #eceef1;
+    --n87-surface: #ffffff;
+    --n87-surface-raised: #ffffff;
+    --n87-surface-muted: #f8f9fb;
+
+    /* Sidebar (deep slate blue) */
+    --n87-sidebar: #1f2937;
+    --n87-sidebar-hover: #273449;
+    --n87-sidebar-active: #334155;
+    --n87-sidebar-text: #cbd5e1;
+    --n87-sidebar-muted: #8593a8;
+
+    /* Text */
+    --n87-text: #1a2233;
+    --n87-text-muted: #5b6779;
+    --n87-text-subtle: #8792a3;
+
+    /* Borders */
+    --n87-border: #e3e6ea;
+    --n87-border-strong: #cfd4db;
+
+    /* Accent — soft violet */
+    --n87-accent: #5b5bd6;
+    --n87-accent-hover: #4f4fca;
+    --n87-accent-soft: #eef0fd;
+    --n87-accent-soft-text: #4643b8;
+    --n87-accent-ring: #b9b8f3;
+
+    /* Status */
+    --n87-success: #17915b;
+    --n87-success-soft: #e6f6ee;
+    --n87-warning: #b7791f;
+    --n87-warning-soft: #fdf5e4;
+    --n87-danger: #d0453b;
+    --n87-danger-soft: #fdeceb;
+    --n87-info: #2b7bd8;
+    --n87-info-soft: #eaf2fc;
+
+    --n87-shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 1px 3px rgb(16 24 40 / 0.05);
+    --n87-shadow-popover: 0 10px 24px -8px rgb(16 24 40 / 0.18);
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --n87-bg: #14171d;
+    --n87-bg-subtle: #191d25;
+    --n87-surface: #1c212a;
+    --n87-surface-raised: #222833;
+    --n87-surface-muted: #1a1f27;
+
+    --n87-sidebar: #12161d;
+    --n87-sidebar-hover: #1b222c;
+    --n87-sidebar-active: #242c38;
+    --n87-sidebar-text: #c3ccd9;
+    --n87-sidebar-muted: #7b8798;
+
+    --n87-text: #e7ebf1;
+    --n87-text-muted: #9aa5b5;
+    --n87-text-subtle: #74808f;
+
+    --n87-border: #2b323d;
+    --n87-border-strong: #3a4350;
+
+    --n87-accent: #9d9df0;
+    --n87-accent-hover: #b0b0f5;
+    --n87-accent-soft: #262a44;
+    --n87-accent-soft-text: #bebdf8;
+    --n87-accent-ring: #4a4a86;
+
+    --n87-success: #45bd85;
+    --n87-success-soft: #16281f;
+    --n87-warning: #d8a748;
+    --n87-warning-soft: #2a2318;
+    --n87-danger: #ec6f65;
+    --n87-danger-soft: #2c1a1a;
+    --n87-info: #5c9fe8;
+    --n87-info-soft: #16222f;
+
+    --n87-shadow-card: 0 1px 2px rgb(0 0 0 / 0.3);
+    --n87-shadow-popover: 0 10px 24px -8px rgb(0 0 0 / 0.55);
+  }
+
+  /* Expose tokens to Tailwind utilities: bg-surface, text-muted, border-line… */
+  @theme inline {
+    --color-bg: var(--n87-bg);
+    --color-bg-subtle: var(--n87-bg-subtle);
+    --color-surface: var(--n87-surface);
+    --color-surface-raised: var(--n87-surface-raised);
+    --color-surface-muted: var(--n87-surface-muted);
+
+    --color-sidebar: var(--n87-sidebar);
+    --color-sidebar-hover: var(--n87-sidebar-hover);
+    --color-sidebar-active: var(--n87-sidebar-active);
+    --color-sidebar-text: var(--n87-sidebar-text);
+    --color-sidebar-muted: var(--n87-sidebar-muted);
+
+    --color-ink: var(--n87-text);
+    --color-muted: var(--n87-text-muted);
+    --color-subtle: var(--n87-text-subtle);
+
+    --color-line: var(--n87-border);
+    --color-line-strong: var(--n87-border-strong);
+
+    --color-accent: var(--n87-accent);
+    --color-accent-hover: var(--n87-accent-hover);
+    --color-accent-soft: var(--n87-accent-soft);
+    --color-accent-soft-text: var(--n87-accent-soft-text);
+    --color-accent-ring: var(--n87-accent-ring);
+
+    --color-success: var(--n87-success);
+    --color-success-soft: var(--n87-success-soft);
+    --color-warning: var(--n87-warning);
+    --color-warning-soft: var(--n87-warning-soft);
+    --color-danger: var(--n87-danger);
+    --color-danger-soft: var(--n87-danger-soft);
+    --color-info: var(--n87-info);
+    --color-info-soft: var(--n87-info-soft);
+  }
+
+  * {
+    border-color: var(--n87-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--n87-bg);
+    color: var(--n87-text);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--n87-text);
+    font-weight: 600;
+    letter-spacing: -0.011em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--n87-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--n87-accent-soft);
+    color: var(--n87-accent-soft-text);
+  }
+
+  /* Slim scrollbars inside the workspace */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--n87-border-strong) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--n87-border-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer utilities {
+  .n87-card {
+    background-color: var(--n87-surface);
+    border: 1px solid var(--n87-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--n87-shadow-card);
+  }
+
+  .n87-scroll-fade {
+    mask-image: linear-gradient(to bottom, transparent, black 12px, black calc(100% - 12px), transparent);
+  }
+
+  .n87-grid-bg {
+    background-image:
+      linear-gradient(to right, var(--n87-border) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--n87-border) 1px, transparent 1px);
+    background-size: 28px 28px;
+    mask-image: radial-gradient(ellipse at top, black 10%, transparent 72%);
+  }
+}

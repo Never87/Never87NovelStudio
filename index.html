@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Never87 Novel Studio — 浏览器端 AI 小说创作工作台，围绕项目组织世界设定、人物、大纲、正文与 AI 辅助。"
+    />
+    <meta name="theme-color" content="#4f46e5" />
+    <title>Never87 Novel Studio</title>
+    <script>
+      /*
+       * SPA deep-link restore.
+       * ---------------------------------------------------------------
+       * GitHub Pages serves public/404.html for any unknown path. That file
+       * rewrites the URL to `<root>?p=<original-path>`, so we translate it back
+       * with history.replaceState BEFORE React Router and the theme script run.
+       * This keeps createBrowserRouter working with real URLs (no HashRouter).
+       *
+       * Runs first and is defensive: on any error it simply leaves the URL.
+       */
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var rawPath = params.get('p');
+          if (rawPath === null) return;
+          var search = params.get('q') || '';
+          var hash = params.get('h') || '';
+          var restored = window.location.pathname + rawPath;
+
+          window.history.replaceState(
+            null,
+            '',
+            restored + (search ? '?' + search : '') + (hash ? '#' + hash : ''),
+          );
+        } catch (e) {
+          /* ignore — worst case the app lands on /dashboard */
+        }
+      })();
+    </script>
+    <script>
+      // Apply the persisted (or system) theme before first paint to avoid a flash.
+      (function () {
+        try {
+          var stored = localStorage.getItem('n87-theme');
+          var mode = stored ? JSON.parse(stored).state.mode : 'system';
+          var dark =
+            mode === 'dark' ||
+            (mode !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.classList.toggle('light', !dark);
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
