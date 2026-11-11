@@ -1,0 +1,225 @@
+import { ZodError } from 'zod';
+import { createProjectId } from '@/utils/id';
+import { now } from '@/utils/date';
+import type { ProjectSettings, ProjectStatus, NovelProject } from '@/types';
+import {
+  ProjectRepository,
+  ProjectRepositoryError,
+  ProjectValidationError,
+  ProjectNotFoundError,
+  ProjectAlreadyExistsError,
+} from '@/repositories/project-repository';
+
+/** Base error for business-rule failures raised by the Service. */
+export class ProjectServiceError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, cause?: unknown) {
+    super(message);
+    this.name = 'ProjectServiceError';
+    this.cause = cause;
+  }
+}
+
+/**
+ * Error types surface the underlying Repository error class so a single
+ * `instanceof` check in the future UI works for both layers.
+ */
+export { ProjectRepositoryError, ProjectValidationError, ProjectNotFoundError, ProjectAlreadyExistsError };
+
+/** Fields a caller may set when creating a project. Id/timestamps are Service-owned. */
+export interface CreateProjectInput {
+  title: string;
+  description?: string;
+  cover?: string;
+  status?: ProjectStatus;
+  genre?: string[];
+  tags?: string[];
+  targetWordCount?: number;
+  settings?: ProjectSettings;
+}
+
+/**
+ * Fields a caller may change on an existing project.
+ *
+ * `id` and `createdAt` are intentionally absent — they can never be changed.
+ * Every field is optional so a partial update leaves untouched data intact.
+ * `settings` is merged over the existing settings (see `updateProject`).
+ */
+export interface UpdateProjectInput {
+  title?: string;
+  description?: string;
+  /** `null` explicitly clears the cover; `undefined` leaves it unchanged. */
+  cover?: string | null;
+  status?: ProjectStatus;
+  genre?: string[];
+  tags?: string[];
+  /** `null` clears the target; `undefined` leaves it unchanged. */
+  targetWordCount?: number | null;
+  settings?: ProjectSettings;
+}
+
+/**
+ * Business layer for projects.
+ *
+ * Owns ids, timestamps, defaults and cross-field rules, and is the only entry
+ * point the (future) UI should call. It never touches Dexie tables directly —
+ * all persistence goes through the injected `ProjectRepository`.
+ */
+export class ProjectService {
+  private readonly repository: ProjectRepository;
+
+  constructor(repository: ProjectRepository = new ProjectRepository()) {
+    this.repository = repository;
+  }
+
+  /**
+   * Creates a project with generated id and timestamps.
+   *
+   * Defaults: `description` `''`, `status` `'planning'`, empty `genre`/`tags`,
+   * empty `settings`. Legitimate caller fields are preserved.
+   */
+  async createProject(input: CreateProjectInput): Promise<NovelProject> {
+    const timestamp = now();
+    const project: NovelProject = {
+      id: createProjectId(),
+      title: input.title,
+      description: input.description ?? '',
+      status: input.status ?? 'planning',
+      genre: input.genre ?? [],
+      tags: input.tags ?? [],
+      settings: input.settings ?? {},
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      ...(input.cover !== undefined ? { cover: input.cover } : {}),
+      ...(input.targetWordCount !== undefined ? { targetWordCount: input.targetWordCount } : {}),
+    };
+
+    // The Repository validates with NovelProjectSchema before writing.
+    try {
+      return await this.repository.create(project);
+    } catch (error) {
+      throw this.wrap(error, `Failed to create project "${input.title}"`);
+    }
+  }
+
+  /** Returns the project with `id`, or `null` when it does not exist. */
+  async getProject(id: string): Promise<NovelProject | null> {
+    try {
+      return await this.repository.getById(id);
+    } catch (error) {
+      throw this.wrap(error, `Failed to load project "${id}"`);
+    }
+  }
+
+  /** All projects, most recently updated first. */
+  async listProjects(): Promise<NovelProject[]> {
+    try {
+      return await this.repository.getAll();
+    } catch (error) {
+      throw this.wrap(error, 'Failed to list projects');
+    }
+  }
+
+  /** Projects with `status`, most recently updated first. */
+  async listProjectsByStatus(status: ProjectStatus): Promise<NovelProject[]> {
+    try {
+      return await this.repository.getByStatus(status);
+    } catch (error) {
+      throw this.wrap(error, `Failed to list projects with status "${status}"`);
+    }
+  }
+
+  /**
+   * Applies a partial update to an existing project.
+   *
+   * - Fails when the project does not exist (never creates it).
+   * - Never allows `id` or `createdAt` to change.
+   * - Leaves omitted fields untouched, so a partial patch cannot wipe data.
+   * - `settings` is shallow-merged over existing settings; pass `{}` to keep
+   *   them, or explicitly set a key to `undefined`-free values to change it.
+   * - Refreshes `updatedAt` and re-validates the merged project.
+   */
+  async updateProject(id: string, input: UpdateProjectInput): Promise<NovelProject> {
+    let existing: NovelProject | null;
+    try {
+      existing = await this.repository.getById(id);
+    } catch (error) {
+      throw this.wrap(error, `Failed to load project "${id}"`);
+    }
+    if (!existing) {
+      throw new ProjectNotFoundError(id);
+    }
+
+    const merged: NovelProject = {
+      ...existing,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.genre !== undefined ? { genre: input.genre } : {}),
+      ...(input.tags !== undefined ? { tags: input.tags } : {}),
+      ...(input.settings !== undefined
+        ? { settings: { ...existing.settings, ...input.settings } }
+        : {}),
+      updatedAt: now(),
+      // `id` and `createdAt` stay as they were — deliberately not spread from input.
+    };
+
+    // Optional fields support explicit clearing via `null`.
+    if (input.cover !== undefined) {
+      if (input.cover === null) delete merged.cover;
+      else merged.cover = input.cover;
+    }
+    if (input.targetWordCount !== undefined) {
+      if (input.targetWordCount === null) delete merged.targetWordCount;
+      else merged.targetWordCount = input.targetWordCount;
+    }
+
+    try {
+      return await this.repository.update(merged);
+    } catch (error) {
+      throw this.wrap(error, `Failed to update project "${id}"`);
+    }
+  }
+
+  /**
+   * Deletes a project.
+   *
+   * Child entities do not exist yet, so no cascade is performed in this phase.
+   */
+  async deleteProject(id: string): Promise<void> {
+    try {
+      await this.repository.delete(id);
+    } catch (error) {
+      throw this.wrap(error, `Failed to delete project "${id}"`);
+    }
+  }
+
+  /** Whether a project with `id` exists. */
+  async projectExists(id: string): Promise<boolean> {
+    try {
+      return await this.repository.exists(id);
+    } catch (error) {
+      throw this.wrap(error, `Failed to check project "${id}"`);
+    }
+  }
+
+  /**
+   * Re-throws known domain errors unchanged and wraps the rest, so the
+   * original Repository/Dexie/Zod cause is always preserved.
+   *
+   * Domain errors (not-found, already-exists, validation) keep their concrete
+   * type across the Service boundary, which lets callers distinguish "invalid
+   * data" from "database failed" with a single `instanceof` check.
+   */
+  private wrap(error: unknown, message: string): Error {
+    if (error instanceof ProjectRepositoryError) return error;
+    if (error instanceof ProjectServiceError) return error;
+    // A raw ZodError (e.g. from an injected repository) becomes a validation
+    // error so callers still see "invalid data", not a generic failure.
+    if (error instanceof ZodError) {
+      return new ProjectValidationError(message, error.issues, error);
+    }
+    return new ProjectServiceError(message, error);
+  }
+}
