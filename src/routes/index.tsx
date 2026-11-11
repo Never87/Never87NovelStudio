@@ -31,8 +31,37 @@ const DashboardPage = lazy(async () => {
   return { default: mod.DashboardPage };
 });
 
-/** Build one route per navigation item, skipping the dashboard (declared above). */
-const moduleRoutes = ALL_NAV_ITEMS.filter((item) => item.id !== 'dashboard').map((item) => {
+/**
+ * Modules whose real pages have shipped (P1-C2-A).
+ *
+ * They are excluded from the generated placeholder routes below and declared
+ * explicitly so they render actual data instead of `ModulePlaceholder`. Every
+ * other navigation item keeps its auto-generated placeholder unchanged.
+ */
+const PROJECTS_NAV_ID = 'projects';
+const RECENT_NAV_ID = 'recent';
+
+const ProjectsPage = lazy(async () => {
+  const mod = await import('@/modules/projects/ProjectsPage');
+  return { default: mod.ProjectsPage };
+});
+
+const RecentProjectsPage = lazy(async () => {
+  const mod = await import('@/modules/projects/RecentProjectsPage');
+  return { default: mod.RecentProjectsPage };
+});
+
+/** Project detail page (P1-C2-B2-A) — `/projects/:projectId`. */
+const ProjectDetailPage = lazy(async () => {
+  const mod = await import('@/modules/projects/ProjectDetailPage');
+  return { default: mod.ProjectDetailPage };
+});
+
+/** Build one route per navigation item, skipping pages declared above. */
+const moduleRoutes = ALL_NAV_ITEMS.filter(
+  (item) =>
+    item.id !== 'dashboard' && item.id !== PROJECTS_NAV_ID && item.id !== RECENT_NAV_ID,
+).map((item) => {
   const Page = createModulePage(item.id);
   return {
     path: item.path.replace(/^\//, ''),
@@ -49,6 +78,11 @@ export const router = createBrowserRouter(
         // Landing page: `/` redirects to the canonical dashboard URL.
         { index: true, element: <Navigate to="/dashboard" replace /> },
         { path: 'dashboard', element: withRouteSuspense(<DashboardPage />) },
+        // Real pages (P1-C2-A) — must stay above `moduleRoutes`.
+        { path: 'projects', element: withRouteSuspense(<ProjectsPage />) },
+        { path: 'recent-projects', element: withRouteSuspense(<RecentProjectsPage />) },
+        // Project detail (P1-C2-B2-A): a child path under the real `/projects` route.
+        { path: 'projects/:projectId', element: withRouteSuspense(<ProjectDetailPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },
@@ -57,3 +91,4 @@ export const router = createBrowserRouter(
   ],
   { basename: ROUTER_BASENAME === '/' ? undefined : ROUTER_BASENAME },
 );
+

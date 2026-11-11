@@ -39,12 +39,12 @@ export interface CreateProjectInput {
   settings?: ProjectSettings;
 }
 
-/**
- * Fields a caller may change on an existing project.
+/** Fields a caller may change on an existing project.
  *
  * `id` and `createdAt` are intentionally absent — they can never be changed.
  * Every field is optional so a partial update leaves untouched data intact.
- * `settings` is merged over the existing settings (see `updateProject`).
+ * `settings` is shallow-merged over the existing settings (see `updateProject`);
+ * an explicit `undefined` value for a settings key REMOVES that key.
  */
 export interface UpdateProjectInput {
   title?: string;
@@ -56,7 +56,12 @@ export interface UpdateProjectInput {
   tags?: string[];
   /** `null` clears the target; `undefined` leaves it unchanged. */
   targetWordCount?: number | null;
-  settings?: ProjectSettings;
+  /**
+   * Shallow-merged over existing settings. A key set to `undefined` (or to an
+   * empty/whitespace-only string) is removed, which is how the UI clears
+   * optional fields such as `author`/`language` without writing invalid data.
+   */
+  settings?: Partial<Record<keyof ProjectSettings, string | undefined>>;
 }
 
 /**
@@ -159,7 +164,7 @@ export class ProjectService {
       ...(input.genre !== undefined ? { genre: input.genre } : {}),
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
       ...(input.settings !== undefined
-        ? { settings: { ...existing.settings, ...input.settings } }
+        ? { settings: mergeSettings(existing.settings, input.settings) }
         : {}),
       updatedAt: now(),
       // `id` and `createdAt` stay as they were — deliberately not spread from input.
@@ -222,4 +227,28 @@ export class ProjectService {
     }
     return new ProjectServiceError(message, error);
   }
+}
+
+/**
+ * Shallow-merges a settings patch over existing settings.
+ *
+ * A key whose patch value is `undefined` or a whitespace-only string is
+ * REMOVED rather than stored as `undefined`/`''`. This is what lets the UI
+ * clear an optional setting (e.g. `author`) without writing a value that
+ * violates the schema or leaving a `{ author: undefined }` key behind.
+ * Keys absent from the patch are left untouched.
+ */
+function mergeSettings(
+  existing: ProjectSettings,
+  patch: Partial<Record<keyof ProjectSettings, string | undefined>>,
+): ProjectSettings {
+  const merged: Record<string, unknown> = { ...existing };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined || (typeof value === 'string' && value.trim() === '')) {
+      delete merged[key];
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged as ProjectSettings;
 }
