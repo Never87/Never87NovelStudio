@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowDownWideNarrow, FolderKanban, Plus, Search, SearchX, X } from 'lucide-react';
 import { Button, PageHeader } from '@/components/ui';
 import { useProjects } from '@/hooks';
@@ -36,6 +37,36 @@ export function ProjectsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortKey, setSortKey] = useState<SortKey>('updated');
   const [createOpen, setCreateOpen] = useState(false);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /**
+   * Honours an "open the create dialog" request handed over by the Topbar.
+   *
+   * The Topbar navigates to `/projects` with `state: { create: true }` instead
+   * of rendering its own dialog, so there is exactly one create flow and one
+   * `useProjects()` instance behind it.
+   *
+   * Keyed on `location.key` rather than on the state object so a REPEATED click
+   * while already on `/projects` still opens the dialog: every `navigate()`
+   * produces a new key even for the same path.
+   *
+   * On consumption the intent is cleared with `replace: true`, so neither a
+   * refresh nor Back/Forward can re-open the dialog, and because the cleanup
+   * writes `state: null` the effect does not re-fire in a loop.
+   */
+  const handledLocationKey = useRef<string | null>(null);
+  useEffect(() => {
+    const wantsCreate = (location.state as { create?: boolean } | null)?.create === true;
+    if (!wantsCreate || handledLocationKey.current === location.key) return;
+
+    handledLocationKey.current = location.key;
+    setCreateOpen(true);
+
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location.key, location.state, location.pathname, location.search, navigate]);
+
   // The project being edited, or null when the edit dialog is closed.
   const [editingProject, setEditingProject] = useState<NovelProject | null>(null);
   // The project pending deletion, or null when the confirm dialog is closed.

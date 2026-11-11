@@ -1,10 +1,12 @@
 import { Info } from 'lucide-react';
-import { DEMO_NOTICE } from '@/modules/dashboard/demo-data';
 
 /**
- * Prominent, unmissable marker that the dashboard shows fabricated data.
- * Deliberately not dismissible: the reviewer must never mistake it for real
- * workspace statistics.
+ * Prominent, unmissable marker for the parts of the dashboard that still show
+ * fabricated data. Deliberately not dismissible: the reviewer must never
+ * mistake demo figures for real workspace statistics.
+ *
+ * The project overview blocks (total, recent, status) are now driven by real
+ * IndexedDB data, so the copy must say "partly" — never imply everything is fake.
  */
 export function DemoDataBanner() {
   return (
@@ -14,8 +16,9 @@ export function DemoDataBanner() {
     >
       <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
       <p className="text-xs leading-relaxed">
-        <span className="font-semibold">Demo Data · </span>
-        {DEMO_NOTICE}
+        <span className="font-semibold">Partial demo data · </span>
+        Project overview (total, recent and status) reflects your real projects. Writing statistics,
+        goals, activity and AI status are still demo content.
       </p>
     </div>
   );

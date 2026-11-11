@@ -132,6 +132,24 @@ export function Topbar() {
   const current = useCurrentNavItem();
   const group = current ? findGroupByPath(current.path) : undefined;
   const currentLabel = current?.label ?? 'Page not found';
+  const navigate = useNavigate();
+
+  /**
+   * Opens the project-creation dialog that lives on `/projects`.
+   *
+   * The Topbar deliberately does NOT render its own `ProjectFormDialog`: that
+   * would need a second `useProjects()` instance (the Topbar is mounted on
+   * every page) and would duplicate the create flow. Instead the intent is
+   * handed to ProjectsPage through router state; ProjectsPage owns the real
+   * dialog and clears the flag once it has been consumed.
+   *
+   * A fresh `state` object is sent on every click so that clicking again while
+   * already on `/projects` still produces a new navigation that re-opens the
+   * dialog.
+   */
+  const openCreateProject = () => {
+    navigate('/projects', { state: { create: true } });
+  };
 
   return (
     <header className="bg-surface flex h-14 shrink-0 items-center gap-3 border-b border-line px-3 sm:px-4">
@@ -194,8 +212,7 @@ export function Topbar() {
         <Button
           variant="primary"
           size="sm"
-          disabled
-          title="Project creation arrives in P1"
+          onClick={openCreateProject}
           iconLeft={<Plus className="size-3.5" />}
           className={cn('ml-0.5')}
         >

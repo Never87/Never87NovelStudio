@@ -98,10 +98,16 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
       setLoading(true);
       try {
         const created = await projectService.createProject(input);
+        // `refresh()` owns its own error handling: if the post-create RELOAD
+        // fails, `fetchProjects` records that as a genuine list read error.
+        // A failure of the CREATE itself (below) must NOT be reported through
+        // `error`, or the list would look broken even though it is intact.
         await refresh();
         return created;
       } catch (err) {
-        if (mountedRef.current) setError(err);
+        // Deliberately does NOT call setError: a rejected create is a
+        // submission error, not a list-read error. It is rethrown so the
+        // calling form (ProjectFormDialog) can show it and stay open.
         throw err;
       } finally {
         if (mountedRef.current) setLoading(false);
@@ -154,3 +160,4 @@ export function useProjects(options: UseProjectsOptions = {}): UseProjectsResult
     deleteProject,
   };
 }
+

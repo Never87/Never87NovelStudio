@@ -71,40 +71,76 @@ export class ProjectRepository {
     this.table = database.projects;
   }
 
-  /** Returns the project with `id`, or `null` when it does not exist. */
+  /**
+   * Returns the project with `id`, or `null` when it does not exist.
+   *
+   * A record that exists but does not satisfy `NovelProjectSchema` is NEVER
+   * returned as data and never mistaken for "not found": it throws a
+   * `ProjectRepositoryError` whose `cause` is the original ZodError, so the
+   * caller sees a diagnosable failure rather than a silently corrupted project.
+   */
   async getById(id: string): Promise<NovelProject | null> {
+    let project: NovelProject | undefined;
     try {
-      const project = await this.table.get(id);
-      return project ?? null;
+      project = await this.table.get(id);
     } catch (error) {
       throw new ProjectRepositoryError(`Failed to read project "${id}"`, error);
     }
+
+    // A missing record keeps the existing contract (null).
+    if (project === undefined) return null;
+
+    // Present but malformed: surface it, do not pass it on.
+    assertReadableProject(project, `Failed to read project "${id}"`);
+    return project;
   }
 
-  /** All projects, newest `updatedAt` first. */
+  /**
+   * All projects, newest `updatedAt` first.
+   *
+   * Every row is validated on read. One malformed record fails the whole
+   * call (no silent filtering) so a corrupt row can never masquerade as an
+   * empty-but-healthy list.
+   */
   async getAll(): Promise<NovelProject[]> {
+    let projects: NovelProject[];
     try {
       // Sorted by the index, then reversed — never rely on natural order.
-      const projects = await this.table.orderBy('updatedAt').reverse().toArray();
-      return projects;
+      projects = await this.table.orderBy('updatedAt').reverse().toArray();
     } catch (error) {
       throw new ProjectRepositoryError('Failed to list projects', error);
     }
+
+    projects.forEach((project, index) =>
+      assertReadableProject(project, `Failed to list projects (record at position ${index})`),
+    );
+    return projects;
   }
 
-  /** Projects with the given status, newest `updatedAt` first. */
+  /**
+   * Projects with the given status, newest `updatedAt` first.
+   *
+   * Rows are validated on read, exactly like `getAll`. This method issues its
+   * own query (it does not delegate to `getAll`), so there is no double parse.
+   */
   async getByStatus(status: ProjectStatus): Promise<NovelProject[]> {
+    let projects: NovelProject[];
     try {
-      const projects = await this.table.where('status').equals(status).toArray();
-      // Sort explicitly so the contract holds regardless of index layout and
-      // never depends on the order IndexedDB happens to return.
-      return projects.sort((a, b) => b.updatedAt - a.updatedAt);
+      projects = await this.table.where('status').equals(status).toArray();
     } catch (error) {
-      throw new ProjectRepositoryError(
-        `Failed to list projects with status "${status}"`,
-        error,
-      );
+      throw new ProjectRepositoryError(`Failed to list projects with status "${status}"`, error);
     }
+
+    projects.forEach((project, index) =>
+      assertReadableProject(
+        project,
+        `Failed to list projects with status "${status}" (record at position ${index})`,
+      ),
+    );
+
+    // Sort explicitly so the contract holds regardless of index layout and
+    // never depends on the order IndexedDB happens to return.
+    return projects.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /**
@@ -172,6 +208,30 @@ export class ProjectRepository {
     } catch (error) {
       throw new ProjectRepositoryError(`Failed to check existence of project "${id}"`, error);
     }
+  }
+}
+
+/**
+ * Guards a record READ from the database.
+ *
+ * Read-path counterpart to `validateProject`: it re-uses the same
+ * `NovelProjectSchema` so a row that was written elsewhere (a previous schema
+ * version, a tampered store, a bad import) can never re-enter the business
+ * layer or the UI unchecked. Unlike the write path this does not replace the
+ * caller's object — the Dexie record is returned as-is — it only verifies it.
+ *
+ * On failure it throws `ProjectRepositoryError` (the error class the query
+ * paths already raise, so existing error handling applies unchanged) with the
+ * original ZodError preserved as `cause` and the record id in the message.
+ */
+function assertReadableProject(project: NovelProject, context: string): void {
+  const result = NovelProjectSchema.safeParse(project);
+  if (!result.success) {
+    const id = String((project as { id?: unknown } | null)?.id ?? '<unknown>');
+    throw new ProjectRepositoryError(
+      `${context}: record "${id}" is malformed and was not returned`,
+      result.error,
+    );
   }
 }
 

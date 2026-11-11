@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { ChevronsLeft, ChevronsRight, Settings, UserRound, X } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Plus, Settings, UserRound, X } from 'lucide-react';
 import { NAV_GROUPS } from '@/config/navigation';
 import { useUiStore } from '@/stores/ui-store';
 import { ButtonLink } from '@/components/ui';
@@ -130,6 +130,15 @@ export function Sidebar({ mobile = false }: SidebarProps) {
           </span>
         )}
 
+        {/* Primary CTA. Handed to ProjectsPage via router state so the
+            single existing create dialog opens, exactly like the Topbar. */}
+        <div className="mb-2">
+          <SidebarNewProjectButton
+            compact={collapsed}
+            onNavigate={mobile ? () => setMobileNavOpen(false) : undefined}
+          />
+        </div>
+
         <div className={cn('flex items-center gap-1', collapsed ? 'flex-col' : 'justify-between')}>
           <div className={cn('flex items-center gap-1', collapsed && 'flex-col')}>
             <button
@@ -170,11 +179,37 @@ export function Sidebar({ mobile = false }: SidebarProps) {
   );
 }
 
-/** Convenience CTA reused by the placeholder pages. */
-export function SidebarNewProjectButton() {
+interface SidebarNewProjectButtonProps {
+  /** Rail (collapsed) mode: show the icon only, no label. */
+  compact?: boolean;
+  /** Called after the link is clicked, e.g. to close the mobile drawer. */
+  onNavigate?: () => void;
+}
+
+/**
+ * Primary "create a project" CTA.
+ *
+ * Navigates to `/projects` carrying `state: { create: true }`, which
+ * ProjectsPage turns into an open `ProjectFormDialog` (the same contract the
+ * Topbar uses — there is exactly one create flow). Navigation is NOT
+ * prevented: `onClick` runs alongside the Link's own navigation, so the
+ * drawer can be closed while the route change still happens.
+ */
+export function SidebarNewProjectButton({ compact = false, onNavigate }: SidebarNewProjectButtonProps) {
   return (
-    <ButtonLink to="/projects" variant="primary" size="sm" fullWidth>
-      New Project
+    <ButtonLink
+      to="/projects"
+      state={{ create: true }}
+      onClick={onNavigate}
+      variant="primary"
+      size="sm"
+      fullWidth
+      aria-label={compact ? 'New Project' : undefined}
+      title={compact ? 'New Project' : undefined}
+      className={cn(compact && 'px-0')}
+      iconLeft={<Plus className="size-4 shrink-0" aria-hidden />}
+    >
+      {!compact ? 'New Project' : null}
     </ButtonLink>
   );
 }
