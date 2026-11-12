@@ -1,4 +1,5 @@
 import type { Table } from 'dexie';
+
 import type { NovelStudioDb } from '@/db';
 import { getDb } from '@/db';
 import { CharacterSchema } from '@/schemas/character';

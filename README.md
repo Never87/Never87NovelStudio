@@ -6,9 +6,10 @@ helps, always with a human in the loop.
 
 **Live site:** <https://never87.github.io/>
 
-> **Status: P3 (in progress).** The shell, design system, routing, theme and project CRUD (P1)
-> are complete. World building, characters (P2-A), narrative planning (P2-B) and
-> outline & scene planning (P3) are live and persisted in IndexedDB. All other modules remain routed placeholders — no AI calls and no
+> **Status: P4 (complete).** The shell, design system, routing, theme and project CRUD (P1)
+> are complete. World building, characters (P2-A), narrative planning (P2-B),
+> outline & scene planning (P3) and the writing editor with autosave (P4) are live and
+> persisted in IndexedDB. All other modules remain routed placeholders — no AI calls and no
 > file imports yet. The dashboard uses clearly-labelled demo data.
 
 ## Tech stack
@@ -44,6 +45,10 @@ npm run dev        # http://localhost:5173
 | `npm run verify:narrative:ui` | UI smoke test of P2-B: tab, dialog, save, reload |
 | `npm run verify:outline` | End-to-end check of P3 (outline & scenes) data layer |
 | `npm run verify:outline:ui` | UI smoke test of P3: volume, chapter + beat link, scene, reload |
+| `npm run verify:editor` | Unit tests for the P4 autosave engine (debounce, serialisation, conflicts) |
+| `npm run verify:markdown` | Unit tests for P4 Markdown parsing/statistics helpers |
+| `npm run verify:writing` | End-to-end check of P4 (manuscript drafts, versions, import/export) data layer |
+| `npm run verify:writing:ui` | UI smoke test of P4: type, autosave, reload, chapter switch |
 
 ## Architecture notes
 
@@ -148,8 +153,7 @@ public/
 | **P1** | IndexedDB, project CRUD ✅ |
 | **P2** | World building & characters ✅ · Narrative planning ✅ |
 | **P3** | Outline (volumes → chapters) & scene planning ✅ |
-| P3 | Outline & scene planning |
-| P4 | Story editor |
+| **P4** | Story editor (chapter manuscript, autosave, versions, import/export) ✅ |
 | P5 | AI providers & assistance |
 | P6 | Import & analysis pipeline |
 | P7 | Knowledge base & continuity |

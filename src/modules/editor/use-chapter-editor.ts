@@ -70,6 +70,33 @@ export function useChapterEditor(
   const requestRef = useRef(0);
   const mountedRef = useRef(true);
 
+  /**
+   * Flushes the outgoing document from a lifecycle cleanup.
+   *
+   * Cleanup cannot surface failures through React state (the component is going
+   * away), so the rejection is handled explicitly here — an unhandled rejection
+   * would otherwise surface as a runtime error on unmount. The failure is NOT
+   * swallowed: it is reported with context so a lost autosave is diagnosable.
+   *
+   * The engine is deliberately NOT disposed. It lives in a ref created during
+   * render, so StrictMode's simulated unmount would permanently poison the
+   * instance reused by the second mount (`disposed` is never reset, which makes
+   * `drain()` no-op forever — the P4 autosave defect). `flush()` already
+   * cancels the debounce timer and drains in-flight work, while `generation`
+   * discards late responses from a superseded target.
+   */
+  const flushOnCleanup = useCallback((reason: string) => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.flush().catch((error: unknown) => {
+      console.error(
+        `[useChapterEditor] Failed to flush the manuscript while ${reason}; ` +
+          'the latest text may not be persisted.',
+        error,
+      );
+    });
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -116,7 +143,6 @@ export function useChapterEditor(
   );
 
   useEffect(() => {
-    const engine = engineRef.current;
     if (!projectId || !chapterId) {
       setStatus('idle');
       setDocument(null);
@@ -126,17 +152,16 @@ export function useChapterEditor(
 
     return () => {
       // Flush the outgoing chapter when the route changes or the hook unmounts.
-      void engine?.flush();
+      flushOnCleanup('switching chapters');
     };
-  }, [projectId, chapterId, load]);
+  }, [projectId, chapterId, load, flushOnCleanup]);
 
   useEffect(() => {
-    const engine = engineRef.current;
     return () => {
-      // Never leave an orphaned engine writing after unmount.
-      void engine?.flush().finally(() => engine?.dispose());
+      // Flush (never dispose) on unmount. See `flushOnCleanup`.
+      flushOnCleanup('unmounting the editor');
     };
-  }, []);
+  }, [flushOnCleanup]);
 
   const onChange = useCallback((markdown: string) => {
     engineRef.current?.update(markdown);

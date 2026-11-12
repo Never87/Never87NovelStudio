@@ -1,8 +1,10 @@
+
 # P4 工作交接（AI_HANDOFF）
 
 > 本文件基于 **磁盘上的实际代码** 整理，不以聊天历史中的计划代替实际进度。
-> 生成时间：P4（Writing Editor）开发中断后。
-> 最后提交：`5b13065 P1开发结束`（P1–P4 的全部代码均**未提交**，停留在工作区）。
+> 最后更新：P4（Writing Editor & Auto-save）收尾验收完成时。
+> 最后提交：`1911b52 WIP: checkpoint P2-P4 development`（P1–P4 全部代码已纳入该提交；
+> 本批次 P4 收尾的两处修改**尚未提交**，停留在工作区）。
 
 ---
 
@@ -118,13 +120,11 @@ src/
 
 ### 3.2 进行中
 
-- **无严格意义上的半成品文件**。所有编辑器文件均可编译，类型检查通过。唯一缺陷是数据层的一个并发竞态（见 §7），导致 UI 流程无法跑通。
+- **无。** P4 主体已全部落盘并通过验收，见 §6、§7。
 
 ### 3.3 未完成
 
-- **§7 的并发竞态修复**（`ensureChapterDraft` / `ensureSceneDraft`）—— 这是 P4 唯一的核心阻塞项。
-- 修复后的 UI 端到端回归（`verify:writing:ui` 需全绿）。
-- 场景正文（Scene）的编辑器入口：服务层与 schema 已就绪，但 **UI 目前只有章节编辑器**，尚未提供场景正文编辑界面（属 P4 范围内可延后项）。
+- **场景正文（Scene）的编辑器入口**：服务层与 schema 已就绪，但 **UI 目前只有章节编辑器**，尚未提供场景正文编辑界面（属 P4 范围内可延后项）。
 - README 的 P4 状态与 Roadmap 未更新（README 仍停在 P3，且 Roadmap 表中 `P3` 重复一行）。
 - README 未补充 P4 的 `verify:*` 脚本说明。
 
@@ -172,7 +172,7 @@ src/
 | `src/services/manuscript-transfer-service.ts` | Markdown 导入/导出 |
 | `src/utils/manuscript-text.ts` | 统计与 Markdown 切分/拼接/标题规范化 |
 | `src/modules/editor/autosave-engine.ts` | 防抖/串行/冲突/切换 flush 的自动保存状态机 |
-| `src/modules/editor/use-chapter-editor.ts` | 引擎 → React 状态桥接 |
+| `src/modules/editor/use-chapter-editor.ts` | 引擎 → React 状态桥接（**含 §7.3 的 cleanup 生命周期修复**） |
 | `src/modules/editor/MarkdownEditor.tsx` | TipTap 编辑面积 |
 | `src/modules/editor/WritingPanel.tsx` | Writing 标签主界面 |
 | `src/modules/editor/VersionHistoryDialog.tsx` | 版本历史对话框 |
@@ -180,13 +180,13 @@ src/
 | `scripts/p4-autosave-unit.cjs` | 自动保存引擎单元测试 |
 | `scripts/p4-markdown-unit.cjs` | Markdown 工具单元测试 |
 | `scripts/p4-verify.cjs` | 浏览器数据层端到端（13 项） |
-| `scripts/p4-ui-verify.cjs` | 浏览器 UI 端到端（12 项） |
+| `scripts/p4-ui-verify.cjs` | 浏览器 UI 端到端（13 项，含 reload 前置断言与有界 CDP 导航） |
 
 > 其余 `?? ` 未跟踪文件（`src/modules/world|characters|narrative|outline/`、对应 schemas/repositories/services/hooks）属 P2–P3 成果，同样未提交，**不要动**。
 
 ---
 
-## 6. 已执行的测试与结果（本次实测）
+## 6. 已执行的测试与结果（P4 收尾验收实测）
 
 | 测试 | 命令 | 结果 |
 | --- | --- | --- |
@@ -194,93 +194,150 @@ src/
 | 自动保存单元 | `node scripts/p4-autosave-unit.cjs` | ✅ **11 / 11 PASS** |
 | Markdown 单元 | `node scripts/p4-markdown-unit.cjs` | ✅ **13 / 13 PASS** |
 | 数据层（真浏览器 + IndexedDB） | `node scripts/p4-verify.cjs` | ✅ **13 / 13 PASS** |
-| UI 端到端（真浏览器） | `node scripts/p4-ui-verify.cjs` | ❌ **5 / 12 PASS，7 FAIL** |
+| UI 端到端（真浏览器） | `node scripts/p4-ui-verify.cjs` | ✅ **13 / 13 PASS** |
+| 生产构建 | `npm run build` | ✅ 通过（exit 0） |
 
-**UI 测试通过的 5 项**：seed、项目详情页渲染、Writing 标签存在且可点击、章节标题与左侧导航渲染、清理无孤儿。
+UI 端到端关键验收证据（实测值）：
 
-**UI 测试失败的 7 项**（全部同一根因）：
-`TipTap 编辑面未挂载` → 无法聚焦 → 无法输入 → 无自动保存 → 无持久化 → 刷新无内容 → 切换章节无 flush。
-
-失败时的界面文本证据：
-> `The manuscript could not be loaded.` / `Failed to create the draft "cdraft_…"` / `Retry`
-
-同时在页面上下文**直接调用** `manuscriptService.openChapterDraft(...)` 却返回 `{ ok: true }` —— 证明是并发/重复调用问题，而非 schema 或逻辑错误。
+- `autosave: 状态显示 "Saved"` → `{"saved":true,"unsaved":false,"failed":false}`
+- `persistence: 正文落库` → `{"content":"The lamp swept the sea.","words":5,"revision":1}`
+- `reload precondition: 导航前已 Saved` → `{saved:true,...}`
+- `reload: 正文从数据库恢复` → `"The lamp swept the sea."`
+- `switch: 切章前 flush 旧章节` → `stored:"Second chapter prose.The lamp swept the sea."`
+- `cleanup: 无孤儿行` → `{"chapters":0,"drafts":0,"versions":0}`
+- `no uncaught page exceptions` → PASS
 
 ---
 
-## 7. 未解决的关键问题（唯一阻塞项）
+## 7. P4 核心缺陷与修复记录
 
-### 7.1 现象
+### 7.1 已修复一：StrictMode 下稿件并发创建（`ensureChapterDraft`）
 
-打开 Writing 标签时报 `Failed to create the draft "cdraft_..."`，编辑器不渲染。
+**现象**：打开 Writing 标签报 `Failed to create the draft "cdraft_..."`，编辑器不渲染。
 
-### 7.2 根因（已定位，来自实测）
+**根因**：`main.tsx` 使用 `<StrictMode>`，开发模式 effect 执行两次；旧实现「先查后建」，
+两次并发调用都查到 `null`，各自 `add()` 一条不同 id 的稿件，而 `chapterDrafts` 有唯一索引
+`&ownerId`，第二次写入违反唯一约束。双击、双标签页、快速切章同样会触发。
 
-- `main.tsx` 使用 `<StrictMode>`，开发模式下 effect 会**执行两次**。
-- `ManuscriptService.openChapterDraft()` 采用「**先查后建**」：
+**修复（已落盘）**：`repositories/manuscript-repository.ts` 提供事务内**原子 upsert**
+`ensureChapterDraft(ownerId, factory)` / `ensureSceneDraft(ownerId, factory)`，检查与写入在同一
+Dexie 事务内完成；`services/manuscript-service.ts` 的 `openChapterDraft` / `openSceneDraft`
+改为调用它们，并以返回的 `created` 作为原有标志。已由 `p4-verify.cjs` 断言
+「creates once, reuses on reopen」验证。
 
-  ```ts
-  let draft = await this.repository.getChapterDraft(chapterId);
-  if (!draft) {
-    draft = await this.repository.createChapterDraft(this.newChapterDraft(projectId, chapterId));
-  }
-  ```
+### 7.2 已修复二：自动保存静默失效（StrictMode + `dispose()`）
 
-- 两次并发调用都查到 `null`，于是各自 `add()` 一条**不同 id** 的稿件；而 `chapterDrafts` 有唯一索引 `&ownerId`，第二次写入违反唯一约束 → 抛错 → UI 显示「无法加载」。
+**现象**：输入文字后 dirty 正常，但状态永远停在 `Unsaved changes`；IndexedDB 中
+`content=""`、`words=0`、`revision=0`；`failed:false`（不报错）。
 
-这是**真实缺陷**，不只在开发模式出现：双击、两个标签页、快速切换章节都会触发。
+**根因**：`modules/editor/use-chapter-editor.ts` 的 unmount cleanup 调用了
+`engine.flush().finally(() => engine.dispose())`。引擎在 **render 期间**创建并存于 `ref`，
+因此全生命周期只创建一次；StrictMode 的「挂载 → 卸载 → 再挂载」对**同一实例**执行，
+cleanup 中的 `dispose()` 把 `disposed` 永久置为 `true`（**无任何重置路径**），第二次挂载时
+`if (!engineRef.current)` 为假、不会重建引擎。于是 `AutosaveEngine.drain()` 的循环条件
+`while (this.pending !== null && this.target && !this.disposed)` **恒为假**，循环体一次都不执行 ——
+`store.save` 从未被调用，正文永不落库。
 
-### 7.3 修复方案（已设计，**尚未落盘**）
+**运行时证据**（浏览器内探针快照）：
+```
+{ at:"enter",  pending:"Hi.", hasTarget:true, disposed:true, gen:2, status:"dirty" }
+{ at:"exit-ok", pending:"Hi.", hasTarget:true, disposed:true, gen:2, status:"dirty" }
+DB {"content":"","words":0,"rev":0}
+```
+`gen:2` 即 StrictMode 二次挂载又 `bind()` 一次的印记。
 
-在 `src/repositories/manuscript-repository.ts` 增加**事务内原子 upsert**（检查与写入在同一个 Dexie 事务中，冲突时重新读取已有行）：
+### 7.3 最终采用的 cleanup 生命周期方案
 
 ```ts
-async ensureChapterDraft(factory: () => ChapterDraft): Promise<{ draft: ChapterDraft; created: boolean }> {
-  return await getDb().transaction('rw', this.chapterDraftTable, async () => {
-    const existing = await this.chapterDraftTable.where('ownerId').equals(factory().ownerId).first();
-    if (existing !== undefined) return { draft: existing, created: false };
-    const validated = validate(factory(), ChapterDraftSchema);
-    await this.chapterDraftTable.add(validated);
-    return { draft: validated, created: true };
+const flushOnCleanup = useCallback((reason: string) => {
+  const engine = engineRef.current;
+  if (!engine) return;
+  engine.flush().catch((error: unknown) => {
+    console.error(
+      `[useChapterEditor] Failed to flush the manuscript while ${reason}; ` +
+        'the latest text may not be persisted.',
+      error,
+    );
   });
-}
-// ensureSceneDraft 同理（sceneDraftTable / SceneDraftSchema）
+}, []);
+
+// 章节/项目切换：切章前 flush 旧文档
+useEffect(() => {
+  /* ...load... */
+  return () => flushOnCleanup('switching chapters');
+}, [projectId, chapterId, load, flushOnCleanup]);
+
+// 真正卸载：只 flush，绝不 dispose
+useEffect(() => () => flushOnCleanup('unmounting the editor'), [flushOnCleanup]);
 ```
 
-然后 `ManuscriptService.openChapterDraft` / `openSceneDraft` 改为调用 `ensure*Draft`，用返回的 `created` 作为原有 `created` 标志。
+要点：
 
-> ⚠️ 上一次会话中此修改的编辑**未成功落盘**（已核对：`manuscript-repository.ts` 中不存在 `ensureChapterDraft`）。因此该 bug 仍然存在，需要重新实施。
+1. **永不 dispose 引擎**。`disposed` 无重置路径，是本次缺陷的根源。
+2. **保留 `flush()`**：它已负责取消防抖定时器、等待在途写入、按 `generation` 丢弃过期响应，
+   不需要 `disposed` 参与；过期写保护由 `generation` 承担，足够。
+3. **显式处理 rejection**：cleanup 无法通过 React state 报错（组件正在卸载），未捕获的
+   rejection 会在卸载时冒成运行时错误；因此用带上下文的 `console.error` 上报，
+   **不静默吞掉**保存失败。项目无 logger 模块、无 ESLint `no-console` 规则，故用 `console.error`。
+4. 两个 cleanup 触发时机不同（target 变更 vs 真正卸载），不会重复保存。
+5. StrictMode 二次挂载复用同一引擎，且 `flush()` 不修改引擎活性，因此仍可正常保存。
+
+### 7.4 已修复三：UI 测试在 reload 阶段无限挂起
+
+**根因**：有未保存文字时 `beforeunload` 守卫会 `preventDefault()` 取消导航，
+导致 CDP `Page.navigate` **永不 resolve**，脚本静默挂起、CPU 为零。这是**合理的业务保护**，
+不是缺陷。
+
+**修复（仅测试脚本，不给业务代码开豁免）**：
+- 新增 `Cdp.sendBounded()`，为任意 CDP 命令加硬上限（`Promise.race` + `clearTimeout`）。
+- reload 前**最多等待 10 秒**确认 `Saved`；成功才导航，超时则**记录 FAIL 并立即终止**
+  （打印 SUMMARY、`exitCode=1`、不再 reload），避免把真实缺陷藏在挂起后面。
+- `Page.navigate` 改用 `sendBounded(..., 15_000)`。
 
 ---
 
-## 8. 准确的续接位置（下一步任务）
+## 8. 剩余风险与维护注意事项
 
-按顺序执行：
+1. **`AutosaveEngine.dispose()` 目前无调用点**。组件真实卸载时不再显式 dispose；`flush()`
+   已保证在途写入完成、定时器取消，卸载后无人持有引擎引用，GC 可回收。若未来让引擎被外部持有，
+   需要重新设计生命周期（不可简单在 cleanup 中 dispose，否则会重蹈 §7.2 覆辙）。
+2. **StrictMode 仍会双挂载**，导致 `openChapterDraft` 被调用两次；已由 `ensureChapterDraft`
+   的原子 upsert 正确处理（测试断言 `created:true` 仅一次）。
+3. **`beforeunload` 在真实浏览器中仍会拦截刷新**（有未保存文字时）——这是预期保护；
+   自动化测试仅在确认 `Saved` 后导航来规避。
+4. **场景正文编辑 UI 仍缺失**（见 §3.3）。
+5. **`console.error` 为唯一诊断通道**。若将来引入 logger 模块，应把 `flushOnCleanup` 的
+   上报切换到该模块。
+6. UI 测试为 **13 项**（原 12 项 + 新增 reload 前置断言），属**新增覆盖**而非放宽标准。
 
-1. **【必修】实现 `ensureChapterDraft` / `ensureSceneDraft`**（§7.3），并在 `ManuscriptService.openChapterDraft` / `openSceneDraft` 中改用它们。
-   - 文件：`src/repositories/manuscript-repository.ts`、`src/services/manuscript-service.ts`
-   - 注意 `getDb()` 已在 repository 文件顶部导入；`ChapterDraftSchema` / `SceneDraftSchema` / `validate` 均在同文件可用。
-2. 运行 `npx tsc -b --noEmit` 确认通过。
-3. 运行 `node scripts/p4-ui-verify.cjs`，预期 **12 / 12 PASS**；若仍有失败，按失败项定位（不要改测试来迁就实现）。
-4. 回归 `node scripts/p4-verify.cjs`（应为 13/13）、`p4-autosave-unit.cjs`（11/11）、`p4-markdown-unit.cjs`（13/13）。
-5. 顺带回归 P3 不被破坏：`node scripts/p3-verify.cjs`。
-6. **更新 README**：状态改为 P4；Roadmap 中 P4 打勾并删除重复的 `P3` 行；补充 P4 的 `verify:*` 脚本说明。
-7. （可选，P4 范围内可延后）为**场景正文**提供编辑入口 —— 服务层（`openSceneDraft` / `saveSceneDraft`）与 schema 已完备，只缺 UI。
+## 9. P4 是否满足关闭条件
 
-### 明确禁止重复开发（已实现且测试通过）
+**满足，建议正式关闭 P4。** 依据：
 
+- 四套测试全绿（11/11、13/13、13/13、13/13），类型检查与生产构建通过；
+- 自动保存、刷新恢复、章节切换、无孤儿记录、无未捕获异常均经真浏览器实测验证；
+- §7.1 与 §7.2 两个真实缺陷均已修复并有回归覆盖；
+- 唯一未完成项（场景正文 UI）属 P4 范围内**可延后**项，不阻塞章节稿件主流程。
+
+遗留的 README 状态更新（P4 打勾、删除重复 `P3` 行、补 `verify:*` 说明）属文档事务，
+不影响功能验收。
+
+## 11. 明确禁止重复开发（已实现且测试通过）
+
+- 稿件/版本的原子 upsert（`ensureChapterDraft` / `ensureSceneDraft`，见 §7.1）
 - 自动保存引擎全部能力（防抖、串行、冲突、switchTo flush、maxWait、注入时钟）
+- `use-chapter-editor` 的 cleanup 生命周期（flush-only，见 §7.3）
 - Markdown 统计/切分/拼接/标题规范化，以及章节内标题降级
 - Markdown 导入（预览/重复处理）与导出
 - 版本快照、手动快照、恢复（追加式）、裁剪
 - 章节锁定（`final` 拒绝写入 + UI 只读）
 - 级联删除（含版本历史一并清理）
 - Writing 标签接入与整个编辑器 UI 骨架、版本/导入导出对话框、字数与保存状态显示
-- 上述四套测试脚本本身
+- 上述四套测试脚本本身（含 §7.4 的有界导航与 reload 前置断言）
 
 ---
 
-## 9. 运行验证的前置条件
+## 12. 运行验证的前置条件
 
 - 需要一个 dev server：`npm run dev -- --port 5177 --strictPort`（P4 脚本硬编码 `http://localhost:5177/`）。
 - **不要重复启动** dev server；先检查 `5177` 端口是否已在监听。

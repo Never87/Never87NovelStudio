@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+
 /**
  * Character domain schemas (single source of truth for character types).
  *

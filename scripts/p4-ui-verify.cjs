@@ -68,6 +68,26 @@ class Cdp {
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
 
+  /**
+   * Sends a command with a hard upper bound.
+   *
+   * `Page.navigate` does not resolve while a `beforeunload` handler cancels
+   * navigation, so an unbounded send would hang the whole run silently.
+   */
+  sendBounded(method, params = {}, ms = 15_000) {
+    let timer = null;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${method} did not complete within ${ms}ms.`)),
+        ms,
+      );
+    });
+    const call = this.send(method, params);
+    // Suppress a later unhandled rejection from the losing branch.
+    call.catch(() => {});
+    return Promise.race([call, deadline]).finally(() => clearTimeout(timer));
+  }
+
   async eval(expression) {
     const result = await this.send('Runtime.evaluate', {
       expression,
@@ -313,7 +333,41 @@ async function main() {
 
   // ---- Reload: the prose survives a full page reload ----
   stage('reloading the page');
-  await cdp.send('Page.navigate', { url: `${APP_URL}#/projects/${seed.projectId}` });
+
+  // A document with unsaved text triggers the app's `beforeunload` guard, which
+  // CANCELS the navigation. `Page.navigate` then never resolves and the run
+  // hangs with no output. Wait (bounded) for the autosave to reach "Saved"
+  // first; if it never does, record a failure and STOP — reloading a dirty
+  // document would only hide the real defect behind a hung navigation.
+  let preReloadSaved = null;
+  for (let i = 0; i < 40; i += 1) {
+    preReloadSaved = await cdp.eval(`(() => {
+      const text = document.body.innerText;
+      return { saved: text.includes('Saved'), unsaved: text.includes('Unsaved changes'), failed: text.includes('Save failed') };
+    })()`);
+    if (preReloadSaved?.saved) break;
+    await sleep(250);
+  }
+  record(
+    'reload precondition: autosave reached "Saved" before navigating',
+    preReloadSaved?.saved === true,
+    JSON.stringify(preReloadSaved),
+  );
+  if (preReloadSaved?.saved !== true) {
+    // Do not navigate into a beforeunload-blocked page; finish the report.
+    teardown();
+    const failedNow = results.filter((r) => !r.ok);
+    console.log('\n================ SUMMARY ================');
+    console.log(`TOTAL ${results.length}  PASS ${results.length - failedNow.length}  FAIL ${failedNow.length}`);
+    if (failedNow.length > 0) {
+      console.log('FAILED:');
+      failedNow.forEach((f) => console.log(`  - ${f.name}: ${f.detail}`));
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  await cdp.sendBounded('Page.navigate', { url: `${APP_URL}#/projects/${seed.projectId}` }, 15_000);
   await cdp.eval(`(() => {
     history.pushState(null, '', '/projects/${seed.projectId}');
     window.dispatchEvent(new PopStateEvent('popstate'));
