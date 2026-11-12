@@ -206,7 +206,10 @@ async function main() {
 
   record(
     '数据库升级到 v4 并新增 volumes/chapters/scenes 表',
-    boot.verno === 4 && JSON.stringify(boot.stores) === JSON.stringify(EXPECTED),
+    // `boot.stores` reflects the CURRENT app schema, which later phases extend.
+    // P3 introduced volumes/chapters/scenes at v4; assert those tables exist and
+    // treat the version as a lower bound rather than the exact latest version.
+    boot.verno >= 4 && EXPECTED.every((t) => boot.stores.includes(t)),
     `verno=${boot.verno} stores=[${boot.stores}]`,
   );
   record(
@@ -279,7 +282,7 @@ async function main() {
   );
   record(
     'v3 → v4 迁移后新增 volumes/chapters/scenes，旧表仍在',
-    migration.verno === 4 && JSON.stringify(migration.v4Tables) === JSON.stringify(EXPECTED),
+    migration.verno >= 4 && EXPECTED.every((t) => migration.v4Tables.includes(t)),
     `verno=${migration.verno} tables=[${migration.v4Tables}]`,
   );
   record(
