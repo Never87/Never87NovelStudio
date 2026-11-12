@@ -19,3 +19,7 @@ export { useScenes } from './use-scenes';
 export type { SceneLoadStatus, UseScenesResult } from './use-scenes';
 export { useCharacters } from './use-characters';
 export type { UseCharactersResult } from './use-characters';
+export { useAiConfig } from './use-ai-config';
+export type { UseAiConfigResult, AiConfigStatus } from './use-ai-config';
+export { useAiAssistance } from './use-ai-assistance';
+export type { UseAiAssistanceResult, AiRunStatus } from './use-ai-assistance';

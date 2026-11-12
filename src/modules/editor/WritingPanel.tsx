@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { Editor } from '@tiptap/react';
 import {
   AlertTriangle,
   BookOpen,
@@ -19,6 +20,7 @@ import { cn } from '@/utils/cn';
 import { formatRelative } from '@/utils/date';
 import { countWords, excerpt } from '@/utils/manuscript-text';
 import { MarkdownEditor } from './MarkdownEditor';
+import { EditorAiAssistant } from '@/modules/ai/EditorAiAssistant';
 import { useChapterEditor } from './use-chapter-editor';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { ImportExportDialog } from './ImportExportDialog';
@@ -231,6 +233,7 @@ function ChapterEditorSurface({
   // number on screen and the number stored always agree.
   const [liveWords, setLiveWords] = useState(0);
   const [versions, setVersions] = useState<DraftVersion[]>([]);
+  const [editor, setEditor] = useState<Editor | null>(null);
 
   useEffect(() => {
     if (document) setLiveWords(document.draft.wordCount);
@@ -348,14 +351,21 @@ function ChapterEditorSurface({
         </div>
       ) : null}
 
-      <MarkdownEditor
-        key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
-        editorKey={document.draft.id}
-        value={document.draft.content}
-        onChange={handleChange}
-        editable={!locked}
-        onSaveShortcut={() => void saveNow()}
-      />
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <MarkdownEditor
+          key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
+          editorKey={document.draft.id}
+          value={document.draft.content}
+          onChange={handleChange}
+          editable={!locked}
+          onSaveShortcut={() => void saveNow()}
+          onEditorReady={setEditor}
+          className="min-h-0 flex-1"
+        />
+        <aside className="border-line w-full shrink-0 border-t p-3 lg:w-64 lg:border-t-0 lg:border-l">
+          <EditorAiAssistant editor={editor} chapterTitle={document.title} locked={locked} />
+        </aside>
+      </div>
 
       <VersionHistoryDialog
         open={historyOpen}

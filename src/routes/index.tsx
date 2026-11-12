@@ -57,11 +57,45 @@ const ProjectDetailPage = lazy(async () => {
   return { default: mod.ProjectDetailPage };
 });
 
+/**
+ * AI configuration & assistance pages (P5).
+ *
+ * Real pages that replace their ModulePlaceholder. They are excluded from the
+ * generated placeholder routes below and declared explicitly.
+ */
+const ApiSettingsPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ApiSettingsPanel');
+  return { default: mod.ApiSettingsPanel };
+});
+
+const ProviderManagementPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ProviderManagementPanel');
+  return { default: mod.ProviderManagementPanel };
+});
+
+const ModelConfigurationPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ModelConfigurationPanel');
+  return { default: mod.ModelConfigurationPanel };
+});
+
+const AiAssistancePage = lazy(async () => {
+  const mod = await import('@/modules/ai/AiAssistancePanel');
+  return { default: mod.AiAssistancePanel };
+});
+
+/** Nav ids that have real pages and must be excluded from placeholders. */
+const REAL_PAGE_NAV_IDS = new Set([
+  'dashboard',
+  PROJECTS_NAV_ID,
+  RECENT_NAV_ID,
+  'api-settings',
+  'provider-management',
+  'model-config',
+  'ai-assistance',
+]);
+
 /** Build one route per navigation item, skipping pages declared above. */
-const moduleRoutes = ALL_NAV_ITEMS.filter(
-  (item) =>
-    item.id !== 'dashboard' && item.id !== PROJECTS_NAV_ID && item.id !== RECENT_NAV_ID,
-).map((item) => {
+const moduleRoutes = ALL_NAV_ITEMS.filter((item) => !REAL_PAGE_NAV_IDS.has(item.id)).map((item) => {
   const Page = createModulePage(item.id);
   return {
     path: item.path.replace(/^\//, ''),
@@ -83,6 +117,11 @@ export const router = createBrowserRouter(
         { path: 'recent-projects', element: withRouteSuspense(<RecentProjectsPage />) },
         // Project detail (P1-C2-B2-A): a child path under the real `/projects` route.
         { path: 'projects/:projectId', element: withRouteSuspense(<ProjectDetailPage />) },
+        // AI configuration & assistance (P5) — real pages.
+        { path: 'settings/api', element: withRouteSuspense(<ApiSettingsPage />) },
+        { path: 'settings/providers', element: withRouteSuspense(<ProviderManagementPage />) },
+        { path: 'settings/models', element: withRouteSuspense(<ModelConfigurationPage />) },
+        { path: 'ai/assistance', element: withRouteSuspense(<AiAssistancePage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },

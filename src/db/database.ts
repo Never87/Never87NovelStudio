@@ -1,5 +1,9 @@
 import Dexie, { type Table } from 'dexie';
 import type {
+  AiGlobalConfig,
+  AiModel,
+  AiProvider,
+  AiTaskConfig,
   Chapter,
   ChapterDraft,
   Character,
@@ -43,6 +47,14 @@ export class NovelStudioDb extends Dexie {
   sceneDrafts!: Table<SceneDraft, string>;
   /** Immutable manuscript snapshots — many per draft (P4). */
   draftVersions!: Table<DraftVersion, string>;
+  /** AI provider configurations — global workspace settings (P5). */
+  aiProviders!: Table<AiProvider, string>;
+  /** AI models — many per provider (P5). */
+  aiModels!: Table<AiModel, string>;
+  /** Per-task model assignments — one row per AI task (P5). */
+  aiTaskConfigs!: Table<AiTaskConfig, string>;
+  /** Singleton row holding the global default model (P5). */
+  aiGlobalConfig!: Table<AiGlobalConfig, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -129,6 +141,39 @@ export class NovelStudioDb extends Dexie {
       chapterDrafts: '&id, &ownerId, projectId, updatedAt',
       sceneDrafts: '&id, &ownerId, projectId, updatedAt',
       draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+    });
+
+    // v6 — AI provider & model configuration (P5).
+    //   aiProviders:    &id, providerType, enabled, updatedAt
+    //                   -> listing/filtering providers; no projectId because
+    //                      credentials are GLOBAL workspace settings, never
+    //                      bound to a novel (see schemas/ai.ts).
+    //   aiModels:       &id, providerId, [providerId+modelId], enabled
+    //                   -> providerId lists a provider's models; the compound
+    //                      [providerId+modelId] index backs duplicate checks.
+    //   aiTaskConfigs:  &task
+    //                   -> `task` is the primary key: exactly one row per AI
+    //                      task, so a partial update touches a single record.
+    //   aiGlobalConfig: &id
+    //                   -> singleton (`id === 'global'`) holding the default model.
+    //
+    // Purely ADDITIVE: every v1-v5 store is restated verbatim so all existing
+    // data (projects through manuscripts) survives the upgrade untouched.
+    this.version(6).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
     });
   }
 }

@@ -6,6 +6,9 @@ import { OutlineService } from './outline-service';
 import { SceneService } from './scene-service';
 import { ManuscriptService } from './manuscript-service';
 import { ManuscriptTransferService } from './manuscript-transfer-service';
+import { AiService } from './ai-service';
+import { AiConfigService } from './ai-config-service';
+import { AiAssistanceService } from './ai-assistance-service';
 
 /**
  * Module-level application Services.
@@ -25,6 +28,17 @@ export const outlineService = new OutlineService();
 export const sceneService = new SceneService();
 export const manuscriptService = new ManuscriptService();
 export const manuscriptTransferService = new ManuscriptTransferService();
+
+/**
+ * AI services (P5).
+ *
+ * `aiService` is the single runtime entry point for generation; the assistance
+ * service wraps it with task prompts and proposal packaging. `aiConfigService`
+ * owns provider/model/task configuration and is used by the settings hooks.
+ */
+export const aiService = new AiService();
+export const aiConfigService = new AiConfigService();
+export const aiAssistanceService = new AiAssistanceService(aiService);
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -78,3 +92,30 @@ export {
   ProjectNotFoundError,
   ProjectAlreadyExistsError,
 } from './project-service';
+
+/* ------------------------------- AI (P5) --------------------------------- */
+
+export {
+  AiConfigService,
+  AiConfigError,
+  AiConfigNotFoundError,
+} from './ai-config-service';
+export type {
+  CreateProviderInput,
+  UpdateProviderInput,
+  CreateModelInput,
+  UpdateModelInput,
+} from './ai-config-service';
+export { AiService } from './ai-service';
+export type { ResolvedAiTarget, GenerateOptions, AiServiceDeps } from './ai-service';
+export { AiAssistanceService, AiAssistanceError, ANCHOR_CONTEXT_CHARS } from './ai-assistance-service';
+export type { AiProposal, RunAssistanceInput, InsertAnchor } from './ai-assistance-service';
+export { AiError, isAiError } from './ai/ai-errors';
+export { AiTransport } from './ai/ai-transport';
+export { ProviderAdapter } from './ai/provider-adapter';
+export { getAdapter, supportedProviderTypes } from './ai/adapter-registry';
+export { TASK_PROMPTS, TASK_PROMPT_LIST } from './ai/task-prompts';
+export type { TaskPromptDefinition, TaskPromptInput } from './ai/task-prompts';
+export { diffWords, isIdentical } from './ai/text-diff';
+export type { DiffToken, DiffOp } from './ai/text-diff';
+export { redactSecrets, maskApiKey, redactKnownPatterns, redactForError } from './ai/redaction';

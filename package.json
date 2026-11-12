@@ -21,7 +21,9 @@
     "verify:editor": "node scripts/p4-autosave-unit.cjs",
     "verify:markdown": "node scripts/p4-markdown-unit.cjs",
     "verify:writing": "node scripts/p4-verify.cjs",
-    "verify:writing:ui": "node scripts/p4-ui-verify.cjs"
+    "verify:writing:ui": "node scripts/p4-ui-verify.cjs",
+    "verify:ai": "node scripts/p5-verify.cjs",
+    "verify:ai:ui": "node scripts/p5-ui-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",

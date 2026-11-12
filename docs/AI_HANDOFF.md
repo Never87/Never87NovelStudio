@@ -2,7 +2,8 @@
 # P4 工作交接（AI_HANDOFF）
 
 > 本文件基于 **磁盘上的实际代码** 整理，不以聊天历史中的计划代替实际进度。
-> 最后更新：P4（Writing Editor & Auto-save）收尾验收完成时。
+> 最后更新：P4（Writing Editor & Auto-save）收尾验收完成时；
+> **P5（AI 集成）交接见文末 §13**（追加，未改动 P4 正文）。
 > 最后提交：`1911b52 WIP: checkpoint P2-P4 development`（P1–P4 全部代码已纳入该提交；
 > 本批次 P4 收尾的两处修改**尚未提交**，停留在工作区）。
 
@@ -342,4 +343,153 @@ useEffect(() => () => flushOnCleanup('unmounting the editor'), [flushOnCleanup])
 - 需要一个 dev server：`npm run dev -- --port 5177 --strictPort`（P4 脚本硬编码 `http://localhost:5177/`）。
 - **不要重复启动** dev server；先检查 `5177` 端口是否已在监听。
 - 浏览器脚本使用 `C:\Program Files\Google\Chrome\Application\chrome.exe`，headless + CDP。
-- 单元测试（autosave / markdown）不需要 dev server。
+- 不需要 dev server（本套 `verify:ai` 为纯 Node + Vite 打包，无网络、无浏览器）。
+- `verify:ai:ui` 需要 dev server 运行在 `http://localhost:5177/`（见 §12）。
+
+---
+
+## 13. P5（AI 集成）交接
+
+> 本节为 P5 追加，P4 正文未改动。所有断言均基于磁盘代码与真机实测。
+
+### 13.1 P5 交付范围
+
+- **Provider Management**（`/settings/providers`）：多协议 provider（OpenAI / Anthropic /
+  Gemini / 自定义 OpenAI 兼容端点）、API Key（默认掩码）、自定义 Header、启停、真实连接测试。
+- **Model Configuration**（`/settings/models`）：手工登记模型（温度 / maxTokens / 超时）、
+  全局默认模型、按任务指派模型、provider 级默认模型（每个 provider 至多一个）。
+- **AI Assistance**（`/ai/assistance`）：独立问答/建议工作区；编辑器内嵌助理（**续写 / 改写 /
+  润色 / 扩写 / 缩写**）。二者共用同一 `useAiAssistance` 引擎。
+- **强制预览**（`AiPreviewDialog` + `DiffPreview`）：任何 AI 输出都必须在 diff 预览中
+  由用户显式 **Apply / Regenerate / Reject**，绝不自动写入正文。
+- **编辑器内动作**：续写（含确定插入锚点）、改写、润色、**扩写、缩写**。扩写/缩写/改写/润色
+  都要求 **非空选区**，以选区文本作为输入；续写使用章节尾部文本。所有动作均产出 `AiProposal`
+  并进入预览。
+
+### 13.2 架构不变量（P6 不得破坏）
+
+1. **每协议一个 Adapter**（`src/services/ai/adapters/*`）。`AiService`/UI 不按 `providerType`
+   分支；新增协议 = 新增 Adapter + 注册表一行。
+2. **唯一传输层** `AiTransport`：唯一的 `fetch` 点，负责超时（真实 `AbortController`）、
+   取消、网络/CORS 归一化。别处不得再写 `fetch`。
+3. **唯一写回路径**：AI 改动只经 `EditorAiAssistant` 里的 TipTap `editor` 实例写回，走 P4
+   防抖 + revision 校验的自动保存；**没有第二条写路径，也无法绕过版本守卫**。P6 必须沿用。
+4. **绝不静默换模型**：参考模型/服务被删或停用时，`AiService.resolveTarget` 抛 `AiError`
+   （`config`），不会偷偷改用其他模型。
+
+### 13.2.1 三项保证（P5 收尾补强）
+
+**F1 — 扩写 / 缩写已暴露且安全**
+- `EditorAiAssistant` 逐字渲染 `TASK_PROMPT_LIST` 中所有 `mode === 'replace-selection'` 的任务：
+  Rewrite / Polish / Expand / Shorten，外加 Continue。任务定义**唯一来源**仍是
+  `src/services/ai/task-prompts.ts`，UI 不复制 prompt。
+- 扩写/缩写复用现有生成管线：`assistance.run` → `AiService.generate` → `AiProposal`，
+  进入 `AiPreviewDialog` 预览。只有 **Apply** 经 TipTap `editor`（唯一写回路径）修改正文；
+  Reject / Regenerate 均不触碰正文。四项 replace 任务均要求非空选区，否则按钮禁用。
+
+**F2 — 运行时错误脱敏已接线**
+- 收口函数 `redactForError(text, secrets)`（`src/services/ai/redaction.ts`）同时做两层处理：
+  ① 按请求自身密钥（API Key、各 header 值）**精确替换**；② 按 `redactKnownPatterns`
+  兜底（`?key=`/`api_key=`/`access_token=`、`x-api-key:`、`x-goog-api-key:`、
+  `Authorization: [Bearer ]`）。
+- `ProviderAdapter.parseError(status, body, rawText, secrets)` 在把 provider 错误文本写入
+  `AiError.detail` **之前**必经 `redactForError`。`secrets` 由 `AiTransport` 在调用点通过
+  `headerSecrets(request.headers)` 提供：除 `content-type` / `anthropic-version` 等协议常量外，
+  **所有 header 值**都视作潜在密钥（含自定义 header），`Authorization` 额外剔除 `Bearer `
+  前缀后单独纳入。
+- 由此，无论 provider 在错误体 / 原始响应 / URL / header 回显里夹带密钥，都不会出现在
+  `AiError.message`、`detail` 或用户可见文本中；`kind`、HTTP `status` 与安全的 provider
+  消息仍保留。网络/CORS 错误的 `detail` 是浏览器自身的 fetch 错误文本（非 provider 控制），
+  亦不含密钥。成功响应的解析不受影响。
+
+**F3 — 续写插入位置确定化**
+- 生成开始时（`EditorAiAssistant.runTask`）用 `captureInsertAnchor(doc, selection.to)` 捕获锚点：
+  `{ pos, docSize, contextBefore }`，随 `AiProposal.insertAnchor` 一路保留到预览。
+- Apply 前用 `validateAnchor(doc, anchor)`（`src/modules/ai/insert-anchor.ts`）校验：文档
+  `content.size` 必须与捕获时一致，且 `pos` 前 `ANCHOR_CONTEXT_CHARS(32)` 个字符必须与
+  `contextBefore` 完全相同；任一不符则不插入，给出**可恢复错误**（提示重新生成）。
+- 因此光标在生成后移动**不影响**插入位置（插到锚点而非实时光标）；章节切换 / 文档改动后
+  Apply 会拒绝而非误插。replace 模式的陈旧选区保护保持不变；仍是单编辑器写路径 + P4
+  revision 保护。
+
+### 13.3 P5 明确未做（留给 P6）
+
+- **Prompt Engineering Center**：可编辑的提示模板、变量、版本化、上下文管理。P5 只有一张
+  **固定**任务提示表（`src/services/ai/task-prompts.ts`），非用户可编辑模板。
+- **模型自动发现**：模型纯手工登记，连接测试不做模型列举。
+- **流式输出**：当前非流式；若加流式需改 `AiTransport`/`ProviderAdapter` 为事件流，
+  并保持“预览→应用”契约。
+- **安全密钥库**：Key 以明文存 IndexedDB，UI 已如实声明，任何地方不得宣称已加密。
+
+### 13.4 数据模型（Dexie `version(6)`，纯附加）
+
+| 表 | 索引 | 说明 |
+| --- | --- | --- |
+| `aiProviders` | `&id, providerType, enabled, updatedAt` | 全局工作区设置，不绑定项目 |
+| `aiModels` | `&id, providerId, [providerId+modelId], enabled` | |
+| `aiTaskConfigs` | `&task` | 每任务一行 |
+| `aiGlobalConfig` | `&id` | 单例（`id==='global'`） |
+
+### 13.5 模型解析顺序
+
+`explicit modelId` → `task 指派` → `global 默认` → 抛错。唯一真源：
+`AiService.resolveTarget`。UI 侧 `AiConfigService.getAssignments()` 暴露同样的信息。
+
+### 13.6 文件清单（P5 新增 / 修改）
+
+**Services / repositories / schemas / types**
+
+- `src/types/ai.ts`、`src/schemas/ai.ts`（受持久化实体真源）
+- `src/repositories/ai-repository.ts`
+- `src/services/ai-config-service.ts`（CRUD + 业务不变量：每 provider 单默认、删级联清理）
+- `src/services/ai-service.ts`（`resolveTarget` + `generate` + `testConnection`）
+- `src/services/ai-assistance-service.ts`（任务 → `AiProposal`，只组包不落库）
+- `src/services/ai/ai-errors.ts`、`ai-transport.ts`、`provider-adapter.ts`、`adapter-registry.ts`、
+  `task-prompts.ts`、`text-diff.ts`、`redaction.ts`、`adapters/{openai,anthropic,gemini}-adapter.ts`
+
+**Hooks**
+
+- `src/hooks/use-ai-config.ts`（提供者/模型/任务配置状态与变更）
+- `src/hooks/use-ai-assistance.ts`（生成生命周期、AbortController 取消、世代令牌防陈旧响应）
+
+**UI（`src/modules/ai/`）**
+
+- `src/modules/ai/`：`ApiSettingsPanel.tsx`、`ProviderManagementPanel.tsx`、`ModelConfigurationPanel.tsx`、
+  `AiAssistancePanel.tsx`、`EditorAiAssistant.tsx`、`insert-anchor.ts`（续写锚点捕获/校验）、`index.ts`
+- `components/`：`fields.tsx`、`ApiKeyInput.tsx`（默认掩码）、`ProviderFormDialog.tsx`、
+  `ModelFormDialog.tsx`、`DiffPreview.tsx`、`AiPreviewDialog.tsx`
+
+**接入 / 修改**
+
+- `src/services/index.ts`（AI 服务单例与导出）、`src/hooks/index.ts`
+- `src/types/index.ts`（AI 类型从 `@/schemas/ai` 再导出）
+- `src/modules/editor/WritingPanel.tsx`（挂载 `EditorAiAssistant`，editor → 侧栏两列布局）
+- `src/routes/index.tsx`（注册 4 个真实页面，`REAL_PAGE_NAV_IDS` 排除占位路由）
+
+### 13.7 验证脚本与结果（实测）
+
+| 测试 | 命令 | 结果 |
+| --- | --- | --- |
+| 类型检查 | `npx tsc -b --noEmit` | ✅ exit 0 |
+| 适配器/diff/**脱敏(真实错误路径)**/**锚点**单元 | `npm run verify:ai` | ✅ **71 / 71** |
+| AI 页面 + 数据层 + **编辑器 AI 动作(F1/F3)**（真浏览器） | `npm run verify:ai:ui` | ✅ **26 / 26** |
+| 生产构建 | `npm run build` | ✅ exit 0（各 AI 页面独立分包） |
+
+`verify:ai` 覆盖：三协议请求构造（URL/auth/body 形状）、响应解析与空响应拒绝、HTTP→错误
+类型映射（auth/model/rate-limit/http）、自定义 Authorization **无法** 覆盖真实 key、自定义
+baseUrl 采用、word-diff 无损且分类正确、密钥与已知凭据模式脱敏；**经真实
+`parseError` 路径**验证 OpenAI/Anthropic/Gemini 回显密钥（含 URL、`x-api-key`、
+原始响应的自定义 header）均不出现在 `AiError` 任何字段；**续写锚点**的 正常/光标移动/
+文档变长/上下文变更/章节切换 判定。
+`verify:ai:ui` 覆盖：4 条路由渲染真实页面（非占位）、provider+model 创建、每 provider 单
+默认不变式、删模型清全局/任务指派、无模型时显式 `config` 错误（不静默换模型）、删 provider
+级联清模型、页面无未捕获异常；**编辑器动作**：五个动作可见、无选区禁用/有选区启用、扩写
+用选区作输入并产出预览、Reject/Regenerate 不改正文、Apply 经编辑器改写正文、
+**续写插到捕获锚点而非移动后的光标**。
+
+### 13.8 安全与部署说明（如实）
+
+- Key 明文存 IndexedDB；API Settings 与 provider 表单均有醒目提示。
+- 请求浏览器直连 provider；Anthropic 可能因 CORS 拒绝浏览器调用，连接测试会如实报
+  CORS/网络错误。应用为静态站点（无后端代理），此类 provider 在放开浏览器访问或加代理前不可用。
+

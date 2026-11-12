@@ -20,6 +20,10 @@ export const ID_PREFIX = {
   chapterDraft: 'cdraft',
   sceneDraft: 'sdraft',
   draftVersion: 'dver',
+  // P5 — AI configuration entities.
+  aiProvider: 'prov',
+  aiModel: 'model',
+  aiTaskConfig: 'aifcfg',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -91,5 +95,20 @@ export function createSceneDraftId(): string {
 /** Convenience wrapper for manuscript-version ids. */
 export function createDraftVersionId(): string {
   return createId(ID_PREFIX.draftVersion);
+}
+
+/** Convenience wrapper for AI provider configuration ids. */
+export function createAiProviderId(): string {
+  return createId(ID_PREFIX.aiProvider);
+}
+
+/** Convenience wrapper for AI model configuration ids. */
+export function createAiModelId(): string {
+  return createId(ID_PREFIX.aiModel);
+}
+
+/** Convenience wrapper for per-task AI model assignment ids. */
+export function createAiTaskConfigId(): string {
+  return createId(ID_PREFIX.aiTaskConfig);
 }
 
