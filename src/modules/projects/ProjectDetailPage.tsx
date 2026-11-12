@@ -1,14 +1,32 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, CalendarClock, FileX2, FolderKanban, Languages, Pencil, Trash2, User } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, CalendarClock, Compass, FileX2, ListTree, FolderKanban, Globe2, Languages, Pencil, Trash2, User, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { useProject } from '@/hooks';
 import type { UpdateProjectInput } from '@/services';
+import { WorldPanel } from '@/modules/world/WorldPanel';
+import { CharactersPanel } from '@/modules/characters/CharactersPanel';
+import { NarrativePanel } from '@/modules/narrative/NarrativePanel';
+import { OutlinePanel } from '@/modules/outline/OutlinePanel';
+import { WritingPanel } from '@/modules/editor/WritingPanel';
+import { cn } from '@/utils/cn';
 import { ProjectFormDialog } from './components/ProjectFormDialog';
 import { DeleteProjectDialog } from './components/DeleteProjectDialog';
 import { ProjectsError, ProjectsLoading } from './components/ProjectsStates';
 import { formatDate, PROJECT_STATUS_META } from './project-meta';
+
+/** Detail tabs: overview (P1), world & characters (P2-A), narrative (P2-B), outline (P3), writing (P4). */
+type DetailTab = 'overview' | 'world' | 'characters' | 'narrative' | 'outline' | 'writing';
+
+const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: ReactNode }> = [
+  { id: 'overview', label: 'Overview', icon: <FolderKanban className="size-3.5" aria-hidden /> },
+  { id: 'world', label: 'World', icon: <Globe2 className="size-3.5" aria-hidden /> },
+  { id: 'characters', label: 'Characters', icon: <Users className="size-3.5" aria-hidden /> },
+  { id: 'narrative', label: 'Narrative', icon: <Compass className="size-3.5" aria-hidden /> },
+  { id: 'outline', label: 'Outline', icon: <ListTree className="size-3.5" aria-hidden /> },
+  { id: 'writing', label: 'Writing', icon: <BookOpen className="size-3.5" aria-hidden /> },
+];
 
 /**
  * Project detail page (`/projects/:projectId`).
@@ -29,6 +47,7 @@ export function ProjectDetailPage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [tab, setTab] = useState<DetailTab>('overview');
 
   const backLink = (
     <ButtonLink
@@ -135,82 +154,120 @@ export function ProjectDetailPage() {
             </Button>
           </div>
         }
+        toolbar={
+          // Scrolls horizontally on narrow screens instead of wrapping awkwardly.
+          <div role="tablist" aria-label="Project sections" className="flex items-center gap-1 overflow-x-auto">
+            {DETAIL_TABS.map((detailTab) => {
+              const selected = tab === detailTab.id;
+              return (
+                <button
+                  key={detailTab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setTab(detailTab.id)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    selected
+                      ? 'bg-accent-soft text-accent-soft-text'
+                      : 'text-muted hover:bg-surface-muted hover:text-ink',
+                  )}
+                >
+                  {detailTab.icon}
+                  {detailTab.label}
+                </button>
+              );
+            })}
+          </div>
+        }
       />
 
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-        {/* Main info card */}
-        <Card padding="md">
-          <h2 className="text-ink text-sm font-semibold">Project details</h2>
-          <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-            <Field label="Status">
-              <Badge tone={statusMeta.tone} size="sm" dot>
-                {statusMeta.label}
-              </Badge>
-            </Field>
-            <Field label="Genre">
-              {project.genre.length > 0 ? (
-                <span className="text-muted">{project.genre.join(' · ')}</span>
-              ) : (
-                <Muted>None</Muted>
-              )}
-            </Field>
-            <Field label="Target word count">
-              {project.targetWordCount !== undefined ? (
-                <span className="text-muted">{project.targetWordCount.toLocaleString()} words</span>
-              ) : (
-                <Muted>Not set</Muted>
-              )}
-            </Field>
-            <Field label="Created" icon={<Calendar className="size-3.5" aria-hidden />}>
-              <span className="text-muted">{formatDate(project.createdAt)}</span>
-            </Field>
-            <Field label="Last updated" icon={<CalendarClock className="size-3.5" aria-hidden />}>
-              <span className="text-muted">{formatDate(project.updatedAt)}</span>
-            </Field>
-          </dl>
+      {tab === 'overview' ? (
+        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          {/* Main info card */}
+          <Card padding="md">
+            <h2 className="text-ink text-sm font-semibold">Project details</h2>
+            <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <Field label="Status">
+                <Badge tone={statusMeta.tone} size="sm" dot>
+                  {statusMeta.label}
+                </Badge>
+              </Field>
+              <Field label="Genre">
+                {project.genre.length > 0 ? (
+                  <span className="text-muted">{project.genre.join(' · ')}</span>
+                ) : (
+                  <Muted>None</Muted>
+                )}
+              </Field>
+              <Field label="Target word count">
+                {project.targetWordCount !== undefined ? (
+                  <span className="text-muted">{project.targetWordCount.toLocaleString()} words</span>
+                ) : (
+                  <Muted>Not set</Muted>
+                )}
+              </Field>
+              <Field label="Created" icon={<Calendar className="size-3.5" aria-hidden />}>
+                <span className="text-muted">{formatDate(project.createdAt)}</span>
+              </Field>
+              <Field label="Last updated" icon={<CalendarClock className="size-3.5" aria-hidden />}>
+                <span className="text-muted">{formatDate(project.updatedAt)}</span>
+              </Field>
+            </dl>
 
-          <div className="mt-4">
-            <dt className="text-subtle text-2xs font-medium uppercase tracking-wide">Description</dt>
-            <dd className="text-muted mt-1 text-sm whitespace-pre-line">
-              {project.description || <Muted>No description</Muted>}
-            </dd>
-          </div>
+            <div className="mt-4">
+              <dt className="text-subtle text-2xs font-medium uppercase tracking-wide">Description</dt>
+              <dd className="text-muted mt-1 text-sm whitespace-pre-line">
+                {project.description || <Muted>No description</Muted>}
+              </dd>
+            </div>
 
-          <div className="mt-4">
-            <dt className="text-subtle text-2xs font-medium uppercase tracking-wide">Tags</dt>
-            <dd className="mt-1.5">
-              {project.tags.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-1">
-                  {project.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="bg-surface-muted text-muted border-line inline-flex items-center rounded border px-1.5 py-0.5 text-2xs"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <Muted>None</Muted>
-              )}
-            </dd>
-          </div>
-        </Card>
+            <div className="mt-4">
+              <dt className="text-subtle text-2xs font-medium uppercase tracking-wide">Tags</dt>
+              <dd className="mt-1.5">
+                {project.tags.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    {project.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="bg-surface-muted text-muted border-line inline-flex items-center rounded border px-1.5 py-0.5 text-2xs"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <Muted>None</Muted>
+                )}
+              </dd>
+            </div>
+          </Card>
 
-        {/* Settings summary (read-only) */}
-        <Card padding="md">
-          <h2 className="text-ink text-sm font-semibold">Settings</h2>
-          <p className="text-subtle mt-1 text-2xs">Read-only summary.</p>
-          <dl className="mt-3 space-y-2.5">
-            <Field label="Author" icon={<User className="size-3.5" aria-hidden />}>
-              {author ? <span className="text-muted">{author}</span> : <Muted>Not set</Muted>}
-            </Field>
-            <Field label="Language" icon={<Languages className="size-3.5" aria-hidden />}>
-              {language ? <span className="text-muted">{language}</span> : <Muted>Not set</Muted>}
-            </Field>
-          </dl>
-        </Card>
-      </div>
+          {/* Settings summary (read-only) */}
+          <Card padding="md">
+            <h2 className="text-ink text-sm font-semibold">Settings</h2>
+            <p className="text-subtle mt-1 text-2xs">Read-only summary.</p>
+            <dl className="mt-3 space-y-2.5">
+              <Field label="Author" icon={<User className="size-3.5" aria-hidden />}>
+                {author ? <span className="text-muted">{author}</span> : <Muted>Not set</Muted>}
+              </Field>
+              <Field label="Language" icon={<Languages className="size-3.5" aria-hidden />}>
+                {language ? <span className="text-muted">{language}</span> : <Muted>Not set</Muted>}
+              </Field>
+            </dl>
+          </Card>
+        </div>
+      ) : tab === 'world' ? (
+        <WorldPanel projectId={project.id} />
+      ) : tab === 'characters' ? (
+        <CharactersPanel projectId={project.id} />
+      ) : tab === 'narrative' ? (
+        <NarrativePanel projectId={project.id} />
+      ) : tab === 'outline' ? (
+        <OutlinePanel projectId={project.id} />
+      ) : (
+        <WritingPanel projectId={project.id} />
+      )}
 
       {/* Edit dialog reuses the shared form; initialProject pre-fills it and
           switches it into edit mode. The hook refreshes the page on success. */}
@@ -222,7 +279,8 @@ export function ProjectDetailPage() {
       />
 
       {/* Delete confirm dialog. Cancel/Escape close it without deleting; on
-          success we navigate away, on failure the dialog stays open. */}
+          success we navigate away, on failure the dialog stays open. Deleting a
+          project also cascades to its world and characters (see ProjectService). */}
       <DeleteProjectDialog
         open={deleteOpen}
         projectTitle={project.title}

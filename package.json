@@ -12,7 +12,16 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "verify": "node scripts/p2a-verify.cjs",
+    "verify:narrative": "node scripts/p2b-verify.cjs",
+    "verify:narrative:ui": "node scripts/p2b-ui-verify.cjs",
+    "verify:outline": "node scripts/p3-verify.cjs",
+    "verify:outline:ui": "node scripts/p3-ui-verify.cjs",
+    "verify:editor": "node scripts/p4-autosave-unit.cjs",
+    "verify:markdown": "node scripts/p4-markdown-unit.cjs",
+    "verify:writing": "node scripts/p4-verify.cjs",
+    "verify:writing:ui": "node scripts/p4-ui-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",

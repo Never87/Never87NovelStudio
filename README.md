@@ -6,9 +6,10 @@ helps, always with a human in the loop.
 
 **Live site:** <https://never87.github.io/>
 
-> **Status: P0 (preview).** The application shell, design system, navigation and routing are
-> complete. Every business module is a routed placeholder — no project data, no AI calls and
-> no file imports are implemented yet. The dashboard uses clearly-labelled demo data.
+> **Status: P3 (in progress).** The shell, design system, routing, theme and project CRUD (P1)
+> are complete. World building, characters (P2-A), narrative planning (P2-B) and
+> outline & scene planning (P3) are live and persisted in IndexedDB. All other modules remain routed placeholders — no AI calls and no
+> file imports yet. The dashboard uses clearly-labelled demo data.
 
 ## Tech stack
 
@@ -38,6 +39,11 @@ npm run dev        # http://localhost:5173
 | `npm run preview` | Serve the production build locally |
 | `npm run typecheck` | Type-check only |
 | `npm run lint` | Alias of `typecheck` |
+| `npm run verify` | End-to-end check of P2-A (world & characters) in real Chrome — needs the dev server running |
+| `npm run verify:narrative` | End-to-end check of P2-B (narrative planning) data layer |
+| `npm run verify:narrative:ui` | UI smoke test of P2-B: tab, dialog, save, reload |
+| `npm run verify:outline` | End-to-end check of P3 (outline & scenes) data layer |
+| `npm run verify:outline:ui` | UI smoke test of P3: volume, chapter + beat link, scene, reload |
 
 ## Architecture notes
 
@@ -121,7 +127,11 @@ src/
     ui/         Button, Card, Badge, PageHeader, EmptyState (design system)
   config/       navigation.ts — routes + page metadata (single source of truth)
   core/theme/   light / dark / system theme store
-  modules/      feature modules (dashboard, shared placeholder)
+  modules/      feature modules (dashboard, projects, world, characters, narrative, outline, shared)
+  schemas/      Zod schemas — single source of truth for every persisted type
+  repositories/ pure IndexedDB access, validating every read and write
+  services/     business layer: ids, timestamps, defaults, cascade deletes
+  hooks/        React data hooks (useWorld, useCharacters, useNarrative, useOutline, useScenes)
   routes/       router, lazy-loading helpers, page components
   stores/       global UI state (sidebar collapse, mobile drawer)
   styles/       index.css — design tokens
@@ -135,8 +145,9 @@ public/
 | Phase | Scope |
 | --- | --- |
 | **P0** | Shell, design system, routing, theme, deployment ✅ |
-| P1 | IndexedDB, project CRUD |
-| P2 | World building & characters |
+| **P1** | IndexedDB, project CRUD ✅ |
+| **P2** | World building & characters ✅ · Narrative planning ✅ |
+| **P3** | Outline (volumes → chapters) & scene planning ✅ |
 | P3 | Outline & scene planning |
 | P4 | Story editor |
 | P5 | AI providers & assistance |

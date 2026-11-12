@@ -9,6 +9,12 @@ import {
   ProjectNotFoundError,
   ProjectAlreadyExistsError,
 } from '@/repositories/project-repository';
+import { WorldRepository } from '@/repositories/world-repository';
+import { CharacterRepository } from '@/repositories/character-repository';
+import { NarrativeRepository } from '@/repositories/narrative-repository';
+import { OutlineRepository } from '@/repositories/outline-repository';
+import { SceneRepository } from '@/repositories/scene-repository';
+import { ManuscriptRepository } from '@/repositories/manuscript-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -73,9 +79,29 @@ export interface UpdateProjectInput {
  */
 export class ProjectService {
   private readonly repository: ProjectRepository;
+  private readonly worldRepository: WorldRepository;
+  private readonly characterRepository: CharacterRepository;
+  private readonly narrativeRepository: NarrativeRepository;
+  private readonly outlineRepository: OutlineRepository;
+  private readonly sceneRepository: SceneRepository;
+  private readonly manuscriptRepository: ManuscriptRepository;
 
-  constructor(repository: ProjectRepository = new ProjectRepository()) {
+  constructor(
+    repository: ProjectRepository = new ProjectRepository(),
+    worldRepository: WorldRepository = new WorldRepository(),
+    characterRepository: CharacterRepository = new CharacterRepository(),
+    narrativeRepository: NarrativeRepository = new NarrativeRepository(),
+    outlineRepository: OutlineRepository = new OutlineRepository(),
+    sceneRepository: SceneRepository = new SceneRepository(),
+    manuscriptRepository: ManuscriptRepository = new ManuscriptRepository(),
+  ) {
     this.repository = repository;
+    this.worldRepository = worldRepository;
+    this.characterRepository = characterRepository;
+    this.narrativeRepository = narrativeRepository;
+    this.outlineRepository = outlineRepository;
+    this.sceneRepository = sceneRepository;
+    this.manuscriptRepository = manuscriptRepository;
   }
 
   /**
@@ -188,12 +214,36 @@ export class ProjectService {
   }
 
   /**
-   * Deletes a project.
+   * Deletes a project AND every child record that belongs to it.
    *
-   * Child entities do not exist yet, so no cascade is performed in this phase.
+   * Cascade order: children first, then the project itself. Deleting children
+   * first means a mid-way failure never leaves the project gone while its
+   * world/characters are still orphaned and unlinked from any UI entry point.
+   *
+   * - Child deletion is idempotent (`deleteByProjectId` treats "nothing to
+   *   delete" as success), so deleting a project with no children is fine.
+   * - The project delete still fails loudly when the project itself is missing,
+   *   preserving the existing P1 contract.
+   * - Child rows are removed by `projectId` index, not by loading and deleting
+   *   one by one, so cleanup stays O(1) queries regardless of cast size.
    */
   async deleteProject(id: string): Promise<void> {
     try {
+      // 1. Cascade children (idempotent).
+      //    Manuscripts (drafts + versions) go FIRST: they are the leaf rows of
+      //    chapters/scenes, so deleting them before their owners keeps the
+      //    delete order child-first even for prose.
+      await this.manuscriptRepository.deleteVersionsByProject(id);
+      await this.manuscriptRepository.deleteChapterDraftsByProject(id);
+      await this.manuscriptRepository.deleteSceneDraftsByProject(id);
+      await this.worldRepository.deleteByProjectId(id);
+      await this.characterRepository.deleteByProjectId(id);
+      await this.narrativeRepository.deleteByProjectId(id);
+      // Scenes before chapters/volumes: children first, then their parents.
+      await this.sceneRepository.deleteByProjectId(id);
+      await this.outlineRepository.deleteChaptersByProjectId(id);
+      await this.outlineRepository.deleteVolumesByProjectId(id);
+      // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {
       throw this.wrap(error, `Failed to delete project "${id}"`);

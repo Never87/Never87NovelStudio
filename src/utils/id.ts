@@ -9,6 +9,17 @@
 /** Prefixes for every entity type. Keep in sync with the Dexie schema. */
 export const ID_PREFIX = {
   project: 'proj',
+  world: 'world',
+  worldSection: 'wsec',
+  character: 'char',
+  narrativePlan: 'narr',
+  plotBeat: 'beat',
+  volume: 'vol',
+  chapter: 'chap',
+  scene: 'scene',
+  chapterDraft: 'cdraft',
+  sceneDraft: 'sdraft',
+  draftVersion: 'dver',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -26,3 +37,59 @@ export function createId(prefix: IdPrefix): string {
 export function createProjectId(): string {
   return createId(ID_PREFIX.project);
 }
+
+/** Convenience wrapper for world ids. */
+export function createWorldId(): string {
+  return createId(ID_PREFIX.world);
+}
+
+/** Convenience wrapper for world section ids. */
+export function createWorldSectionId(): string {
+  return createId(ID_PREFIX.worldSection);
+}
+
+/** Convenience wrapper for character ids. */
+export function createCharacterId(): string {
+  return createId(ID_PREFIX.character);
+}
+
+/** Convenience wrapper for narrative-plan ids. */
+export function createNarrativePlanId(): string {
+  return createId(ID_PREFIX.narrativePlan);
+}
+
+/** Convenience wrapper for plot-beat ids. */
+export function createPlotBeatId(): string {
+  return createId(ID_PREFIX.plotBeat);
+}
+
+/** Convenience wrapper for volume ids. */
+export function createVolumeId(): string {
+  return createId(ID_PREFIX.volume);
+}
+
+/** Convenience wrapper for chapter ids. */
+export function createChapterId(): string {
+  return createId(ID_PREFIX.chapter);
+}
+
+/** Convenience wrapper for scene ids. */
+export function createSceneId(): string {
+  return createId(ID_PREFIX.scene);
+}
+
+/** Convenience wrapper for chapter-manuscript ids. */
+export function createChapterDraftId(): string {
+  return createId(ID_PREFIX.chapterDraft);
+}
+
+/** Convenience wrapper for scene-manuscript ids. */
+export function createSceneDraftId(): string {
+  return createId(ID_PREFIX.sceneDraft);
+}
+
+/** Convenience wrapper for manuscript-version ids. */
+export function createDraftVersionId(): string {
+  return createId(ID_PREFIX.draftVersion);
+}
+
