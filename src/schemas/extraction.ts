@@ -107,6 +107,46 @@ const IntegrationConflictSchema = z
 
 export type IntegrationConflict = z.infer<typeof IntegrationConflictSchema>;
 
+/**
+ * Per-field conflict resolution policy (P8 Batch 5 — field-level conflicts).
+ *
+ * When an incoming record disagrees with an existing entity field, the user
+ * MUST choose what happens; nothing is silently overwritten:
+ *
+ *   - `keep-existing`   — preserve the entity's current value (report only).
+ *   - `use-extracted`   — replace the field with the extracted value.
+ *   - `fill-empty-only` — write the extracted value ONLY where the existing
+ *                         value is empty (a no-op for a populated field).
+ *
+ * There is intentionally NO default that overwrites. A field without an
+ * explicit choice resolves to `keep-existing`, so a missing decision can only
+ * ever be conservative.
+ */
+export const CONFLICT_STRATEGIES = ['keep-existing', 'use-extracted', 'fill-empty-only'] as const;
+export const ConflictStrategySchema = z.enum(CONFLICT_STRATEGIES);
+export type ConflictStrategy = z.infer<typeof ConflictStrategySchema>;
+
+/**
+ * One applied conflict decision, recorded in the integration audit so the
+ * resulting entity state is explainable after the fact.
+ */
+export const ConflictResolutionSchema = z
+  .object({
+    field: z.string().min(1).max(120),
+    strategy: ConflictStrategySchema,
+    /** The value the entity held BEFORE the write. */
+    existing: z.string().max(4_000),
+    /** The value proposed by the extraction. */
+    incoming: z.string().max(4_000),
+    /** What was actually persisted for this field. */
+    outcome: z.string().max(4_000),
+    /** True when the entity field actually changed. */
+    changed: z.boolean(),
+  })
+  .strict();
+
+export type ConflictResolution = z.infer<typeof ConflictResolutionSchema>;
+
 export const ExtractionIntegrationSchema = z
   .object({
     status: IntegrationStatusSchema,
@@ -114,6 +154,13 @@ export const ExtractionIntegrationSchema = z
     appliedEntityId: z.string().min(1).optional(),
     conflicts: z.array(IntegrationConflictSchema).max(50).optional(),
     appliedAt: z.number().int().nonnegative().optional(),
+    /**
+     * Field-level conflict decisions applied at integration time (P8 Batch 5).
+     * Additive + optional: records integrated before this field existed simply
+     * omit it. Present on an applied record, it explains exactly how each
+     * conflicting field was resolved (and what was stored).
+     */
+    resolutions: z.array(ConflictResolutionSchema).max(50).optional(),
   })
   .strict();
 
@@ -129,6 +176,67 @@ const timestampSchema = z
   .nonnegative('Timestamp must be non-negative');
 
 const stringListSchema = z.array(z.string().trim().min(1).max(80)).max(50);
+
+/* -------------------------------------------------------------------------- */
+/* Merge audit trail (P8 Batch 4)                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Audit trail recorded on a record that has been MERGED into another extraction
+ * record (NOT into a project entity — that is Project Integration, a later phase).
+ *
+ * Merge folds a duplicate pending candidate ("source") into an existing one
+ * ("target"). The SOURCE moves to `reviewStatus: 'merged'` and carries this
+ * metadata so the merge is auditable and reversible in intent:
+ *   - `targetId`      — the extraction id the source was folded into.
+ *   - `mergedAt`      — when the merge happened.
+ *   - `absorbedEvidence` — count of source evidence locators appended to the
+ *                          target (informational; the target holds the real set).
+ *
+ * A merged record is terminal (never silently overwritten). Its evidence is
+ * PRESERVED on the source record itself as well as appended to the target, so
+ * provenance is never lost. This structure is additive: records that were never
+ * merged simply omit the field.
+ */
+export const ExtractionMergeSchema = z
+  .object({
+    /** The extraction record this one was merged INTO. Never equal to its own id. */
+    targetId: z.string().min(1, 'A merge target id is required'),
+    /** When the merge was performed (epoch ms). */
+    mergedAt: timestampSchema,
+    /** How many source evidence locators were appended to the target. */
+    absorbedEvidence: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type ExtractionMerge = z.infer<typeof ExtractionMergeSchema>;
+
+/**
+ * Integration audit trail (P8 Batch 5).
+ *
+ * Written when a confirmed record is APPLIED, so every integrated entity is
+ * traceable: which preview was applied, which field strategies the user chose,
+ * the extraction/document fingerprints the decision was based on, and what each
+ * conflict field resolved to. Additive + optional — records that were never
+ * applied (or were applied by an older build) omit it.
+ */
+export const ExtractionIntegrationAuditSchema = z
+  .object({
+    /** The preview fingerprint the user explicitly confirmed. */
+    previewFingerprint: z.string().min(1, 'An applied integration must carry its preview fingerprint').max(80),
+    /** sha256 fingerprint of the extraction record at apply time. */
+    recordFingerprint: z.string().min(1).max(80),
+    /** sha256 of the source document raw text at apply time. */
+    documentHash: z.string().min(1).max(80),
+    /** The field strategies the user chose for this apply. */
+    fieldStrategies: z.record(z.string(), ConflictStrategySchema),
+    /** Per-field outcome of the conflict decisions. */
+    resolutions: z.array(ConflictResolutionSchema).max(50),
+    appliedAt: timestampSchema,
+  })
+  .strict();
+
+export type ExtractionIntegrationAudit = z.infer<typeof ExtractionIntegrationAuditSchema>;
 
 export const ExtractionRecordSchema = z
   .object({
@@ -172,8 +280,10 @@ export const ExtractionRecordSchema = z
     /**
      * Idempotency key: a deterministic string that identifies "the same"
      * extraction so re-running extraction updates in place rather than
-     * duplicating. Uniqueness is enforced transactionally by the importer, not
-     * by an index (Dexie cannot enforce a unique constraint on a non-PK field).
+     * duplicating. Uniqueness is enforced at the DATABASE level by the compound
+     * UNIQUE index `&[projectId+dedupeKey]` (Dexie v10), and additionally by the
+     * importer's transactional "find-by-key → update-else-insert" upsert (which
+     * turns a rare concurrent-insert race into an update instead of an error).
      */
     dedupeKey: z.string().min(1, 'A dedupe key is required').max(400),
 
@@ -184,6 +294,19 @@ export const ExtractionRecordSchema = z
     /** Where/whether this record has been integrated into project entities. */
     integration: ExtractionIntegrationSchema.default({ status: 'not-applied' }),
 
+    /**
+     * Merge audit trail (P8 Batch 4). Present IFF `reviewStatus === 'merged'`;
+     * absent otherwise. Additive field — records never merged omit it entirely.
+     */
+    merge: ExtractionMergeSchema.optional(),
+
+    /**
+     * Integration audit trail (P8 Batch 5). Present IFF the record has been
+     * integrated (`integration.status === 'applied'`); absent otherwise.
+     * Additive field.
+     */
+    integrationAudit: ExtractionIntegrationAuditSchema.optional(),
+
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
@@ -191,6 +314,17 @@ export const ExtractionRecordSchema = z
   .refine((record) => record.updatedAt >= record.createdAt, {
     message: 'updatedAt cannot be earlier than createdAt',
     path: ['updatedAt'],
+  })
+  // A merged record MUST carry its merge audit trail, and a non-merged record
+  // MUST NOT (keeps the lifecycle invariant explicit and machine-checkable).
+  .refine((record) => (record.reviewStatus === 'merged') === (record.merge !== undefined), {
+    message: 'A `merge` audit trail is present if and only if reviewStatus is "merged"',
+    path: ['merge'],
+  })
+  // A record can never be merged into itself.
+  .refine((record) => record.merge === undefined || record.merge.targetId !== record.id, {
+    message: 'An extraction cannot be merged into itself',
+    path: ['merge', 'targetId'],
   });
 
 export type ExtractionRecord = z.infer<typeof ExtractionRecordSchema>;

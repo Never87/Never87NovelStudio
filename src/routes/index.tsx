@@ -110,6 +110,18 @@ const PlotHoleDetectorPage = lazy(async () => {
   return { default: mod.PlotHoleDetectorPanel };
 });
 
+/** Extraction Review Center (P8 Batch 4). */
+const ExtractionReviewPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ExtractionReviewPanel');
+  return { default: mod.ExtractionReviewPanel };
+});
+
+/** Project Integration (P8 Batch 5). */
+const ProjectIntegrationPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ProjectIntegrationPanel');
+  return { default: mod.ProjectIntegrationPanel };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -124,6 +136,8 @@ const REAL_PAGE_NAV_IDS = new Set([
   'knowledge-base',
   'continuity',
   'plot-hole',
+  'extraction-review',
+  'project-integration',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -161,6 +175,10 @@ export const router = createBrowserRouter(
         { path: 'ai/knowledge-base', element: withRouteSuspense(<KnowledgeBasePage />) },
         { path: 'ai/continuity-manager', element: withRouteSuspense(<ContinuityManagerPage />) },
         { path: 'ai/plot-hole-detector', element: withRouteSuspense(<PlotHoleDetectorPage />) },
+        // Extraction Review Center (P8 Batch 4).
+        { path: 'import/review-center', element: withRouteSuspense(<ExtractionReviewPage />) },
+        // Project Integration (P8 Batch 5).
+        { path: 'import/project-integration', element: withRouteSuspense(<ProjectIntegrationPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },
@@ -169,4 +187,3 @@ export const router = createBrowserRouter(
   ],
   { basename: ROUTER_BASENAME === '/' ? undefined : ROUTER_BASENAME },
 );
-

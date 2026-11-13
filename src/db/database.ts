@@ -334,6 +334,147 @@ export class NovelStudioDb extends Dexie {
       documentSections: '&id, projectId, documentId, [documentId+order], parentId',
       extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, [projectId+dedupeKey]',
     });
+
+    // v10 — Database-level UNIQUE dedupe key for extraction records (P8 Batch 3
+    // hardening).
+    //   extractionRecords:  ... &[projectId+dedupeKey] ...
+    //                      -> promotes the idempotency index from NON-unique to
+    //                         UNIQUE. This makes "at most one extraction per
+    //                         (project, dedupeKey)" a hard IndexedDB constraint:
+    //                         a second `add()` of the same key now throws
+    //                         ConstraintError at the DATABASE level, even for two
+    //                         independent service instances, two tabs, or a stale
+    //                         in-process lock. The service still performs its
+    //                         find→update-else-insert inside a transaction (so the
+    //                         common path is a clean upsert), but the schema is now
+    //                         the backstop that guarantees no duplicate can ever
+    //                         be committed. An existing duplicate (which the prior
+    //                         transactional upsert prevented) would fail this
+    //                         upgrade loudly rather than silently persist — the
+    //                         desired fail-safe.
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v9 store is restated verbatim;
+    // only the extractionRecords index line gains the `&` unique marker. No rows
+    // are added, removed or mutated by the migration.
+    this.version(10).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+    });
+
+    // v11 — Extraction Review Center merge audit trail (P8 Batch 4).
+    //   extractionRecords: unchanged INDEXES.
+    //                      -> `ExtractionRecord` gains an OPTIONAL `merge`
+    //                         sub-object ({targetId, mergedAt, absorbedEvidence}),
+    //                         written only when a record is merged into another
+    //                         extraction (reviewStatus 'merged'). Because it is a
+    //                         nested object it CANNOT be indexed by Dexie and no
+    //                         query needs to filter on it (the review UI reads the
+    //                         whole record), so the schema/indexes are IDENTICAL to
+    //                         v10. This block exists purely to document the
+    //                         additive model change and to bump the DB version so
+    //                         an existing browser upgrades (a no-op data-wise).
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v10 store is restated
+    // verbatim; no index is added, removed or changed, and no row is mutated by
+    // the migration. Records created before v11 simply omit `merge`, which the
+    // schema treats as "not merged".
+    this.version(11).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+    });
+
+    // v12 — Project Integration audit + conflict resolutions (P8 Batch 5).
+    //   extractionRecords: unchanged INDEXES.
+    //                      -> `ExtractionRecord` gains two ADDITIVE optional
+    //                         sub-objects:
+    //                           - `integrationAudit`
+    //                             {previewFingerprint, recordFingerprint,
+    //                              documentHash, fieldStrategies, resolutions,
+    //                              appliedAt} — written when a record is APPLIED
+    //                             (integration.status === 'applied').
+    //                           - `integration.resolutions`
+    //                             [{field, strategy, existing, incoming,
+    //                               outcome, changed}] — how each conflicting
+    //                             field was resolved.
+    //                         Both are nested objects, so they CANNOT be indexed
+    //                         by Dexie and no query filters on them; the schema
+    //                         is IDENTICAL to v11. This block documents the
+    //                         additive model change and bumps the DB version so
+    //                         an existing browser upgrades (a no-op data-wise).
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v11 store is restated
+    // verbatim; no index is added, removed or changed, and no row is mutated by
+    // the migration. Records created before v12 simply omit the new fields.
+    this.version(12).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+    });
   }
 }
 

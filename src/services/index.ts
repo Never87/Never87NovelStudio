@@ -15,6 +15,11 @@ import { ContextAssemblyService } from './context-assembly-service';
 import { KnowledgeService } from './knowledge-service';
 import { ContinuityService } from './continuity-service';
 import { AnalysisService } from './analysis-service';
+import { ImportService } from './import-service';
+import { ExtractionService } from './extraction-service';
+
+import { ReviewService } from './review-service';
+import { IntegrationService } from './integration-service';
 
 /**
  * Module-level application Services.
@@ -69,6 +74,51 @@ export const contextAssemblyService = new ContextAssemblyService({ aiService });
 export const knowledgeService = new KnowledgeService();
 export const continuityService = new ContinuityService();
 export const analysisService = new AnalysisService();
+
+/**
+ * Import pipeline service (P8 Batch 2).
+ *
+ * Owns the source-document lifecycle (register → parse → confirm) and structure
+ * editing over `DocumentSection`. Defaults to a repository bound to the same
+ * singleton `db`, so it shares the one IndexedDB instance with every other
+ * service and hook.
+ */
+export const importService = new ImportService();
+
+/**
+ * Information-extraction service (P8 Batch 3).
+ *
+ * Turns a document's CONFIRMED structure into review-pending `ExtractionRecord`s,
+ * either manually or through the P5 AI pipeline (`aiService.generate`, lazily
+ * resolved). Reuses the shared `importService` so confirmed-section gating and
+ * project scoping are identical to the import batch. It never writes project
+ * entities — integration is a separate, user-reviewed step.
+ */
+export const extractionService = new ExtractionService({ importService });
+
+/**
+ * Extraction Review Center service (P8 Batch 4).
+ *
+ * Owns the REVIEW LIFECYCLE (edit pending → confirm / reject / restore / merge)
+ * of the review-pending `ExtractionRecord`s produced by `extractionService`. It
+ * composes the shared `importService` and `extractionService` so evidence
+ * re-resolution and confirmed-structure gating are identical to the extraction
+ * batch, and it never writes project entities. A "merge" folds a duplicate
+ * extraction into another EXTRACTION RECORD (not into a project entity).
+ */
+export const reviewService = new ReviewService({ importService, extractionService });
+/**
+ * Project Integration service (P8 Batch 5).
+ *
+ * The ONLY phase that turns CONFIRMED `ExtractionRecord`s into real project
+ * entities (Character / World section / KnowledgeEntry). It composes the shared
+ * `importService` so evidence re-validation is identical to the review batch,
+ * and it never touches a record that has not been explicitly confirmed. Every
+ * write runs inside a single Dexie transaction spanning the import tables and
+ * the target entity table, so an entity can never be written without its record
+ * being stamped `applied`.
+ */
+export const integrationService = new IntegrationService({ importService });
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -198,3 +248,98 @@ export type {
   RunAnalysisResult,
   UpdateFindingInput,
 } from './analysis-service';
+
+/* ------------------------------ Import (P8) ------------------------------ */
+
+export {
+  ImportService,
+  ImportServiceError,
+  ImportNotFoundError,
+  ImportConflictError,
+  hashText,
+} from './import-service';
+export {
+  hashRawText,
+  sha256Hex,
+  isCurrentHashFormat,
+  HASH_ALGORITHM,
+  HASH_PREFIX,
+} from '@/utils/text-hash';
+export type {
+  CreateDocumentInput,
+  UpdateSectionInput,
+  ParseDocumentResult,
+} from './import-service';
+
+/* ---------------------------- Extraction (P8.3) -------------------------- */
+
+export {
+  ExtractionService,
+  ExtractionServiceError,
+  ExtractionNotFoundError,
+  ExtractionValidationError,
+  buildExtractionMessages,
+  parseAiCandidates,
+} from './extraction-service';
+export type {
+  CreateManualExtractionInput,
+  UpdateExtractionInput,
+  GenerateAiExtractionsInput,
+  GenerateAiExtractionsResult,
+  AiExtractionCandidate,
+  EvidenceInput,
+  GenerateFn,
+} from './extraction-service';
+export {
+  resolveEvidenceInSection,
+  resolveEvidenceInDocument,
+  findOccurrences,
+  toDocumentOffsets,
+} from '@/utils/evidence-resolution';
+export type {
+  ResolveEvidenceResult,
+  ResolveEvidenceOptions,
+  EvidenceResolutionFailure,
+} from '@/utils/evidence-resolution';
+
+/* ------------------------- Review Center (P8.4) -------------------------- */
+
+export {
+  ReviewService,
+  ReviewServiceError,
+  ReviewNotFoundError,
+  ReviewValidationError,
+  evidenceStillValid,
+  dedupeEvidence,
+} from './review-service';
+export type {
+  ReviewQueueFilters,
+  ReviewQueueItem,
+  ReviewDetail,
+  ReviewedEvidence,
+  UpdatePendingInput,
+  ReviewActionResult,
+  MergeResult,
+} from './review-service';
+
+/* ----------------------- Project Integration (P8.5) ---------------------- */
+
+export {
+  IntegrationService,
+  IntegrationServiceError,
+  IntegrationNotFoundError,
+  IntegrationValidationError,
+  knowledgeKindFor,
+} from './integration-service';
+export type {
+  IntegrationItemResult,
+  IntegrationBatchResult,
+  IntegrationTargetType,
+  IntegrationPreview,
+  PreviewFieldMapping,
+  PreviewExistingMatch,
+  PreviewPlan,
+  PreviewEvidence,
+  ApplyIntegrationInput,
+} from './integration-service';
+export type { ConflictStrategy, ConflictResolution } from '@/schemas/extraction';

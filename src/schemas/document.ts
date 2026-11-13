@@ -119,6 +119,28 @@ export const SourceDocumentSchema = z
 
     status: DocumentStatusSchema,
 
+    /**
+     * When the document's structure was last parsed (P8 Batch 2). Absent/null
+     * for a freshly-registered, not-yet-parsed document.
+     */
+    parsedAt: timestampSchema.nullable().optional(),
+    /**
+     * Fingerprint of `rawText` captured at the last parse (P8 Batch 2), stored
+     * TAGGED as `sha256:<64 hex>` (see `@/utils/text-hash`). Used to detect
+     * whether the raw text changed since parsing; when it matches, a re-parse is
+     * a no-op (idempotent). Because `rawText` can never be edited through the
+     * service, this normally only changes on a fresh import. A value in any
+     * other format (e.g. a legacy 8-hex FNV digest) is treated as "unknown" and
+     * triggers the normal guarded re-parse path — never silently treated equal.
+     */
+    parsedTextHash: z.string().min(1).optional(),
+    /**
+     * When the user last CONFIRMED the document's structure (P8 Batch 2).
+     * Absent/null means "not confirmed". ANY structural edit clears it, so a
+     * confirmed document can never silently fall back to stale structure.
+     */
+    structureConfirmedAt: timestampSchema.nullable().optional(),
+
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })

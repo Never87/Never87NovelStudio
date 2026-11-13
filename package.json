@@ -28,7 +28,18 @@
     "verify:prompt:ui": "node scripts/p6-ui-verify.cjs",
     "verify:knowledge": "node scripts/p7-verify.cjs",
     "verify:knowledge:ui": "node scripts/p7-ui-verify.cjs",
-    "verify:import": "node scripts/p8-verify.cjs"
+    "verify:import": "node scripts/p8-verify.cjs",
+    "verify:import:batch2": "node scripts/p8-batch2-verify.cjs",
+    "verify:import:batch2:ui": "node scripts/p8-batch2-idb-verify.cjs",
+    "verify:extraction": "node scripts/p8-extraction-verify.cjs",
+    "verify:extraction:idb": "node scripts/p8-extraction-idb-verify.cjs",
+    "verify:review": "node scripts/p8-review-verify.cjs",
+    "verify:review:idb": "node scripts/p8-review-idb-verify.cjs",
+    "verify:review:ui": "node scripts/p8-review-ui-verify.cjs",
+    "verify:import:ui": "node scripts/p8-migration-ui-verify.cjs",
+        "verify:integration":  "node scripts/p8-integration-verify.cjs",
+    "verify:integration:idb":  "node scripts/p8-integration-idb-verify.cjs",
+    "verify:integration:ui":  "node scripts/p8-integration-ui-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",

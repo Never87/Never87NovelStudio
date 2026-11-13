@@ -22,6 +22,15 @@ export class WorldRepository {
     this.table = database.worlds;
   }
 
+  /**
+   * The underlying Dexie table, exposed ONLY so a composing service (Project
+   * Integration) can include it in a shared transaction scope. All reads/writes
+   * still go through the validated methods above.
+   */
+  get dexieTable(): Table<World, string> {
+    return this.table;
+  }
+
   /** Returns the world owned by `projectId`, or `null` when none exists. */
   async getByProjectId(projectId: string): Promise<World | null> {
     let world: World | undefined;

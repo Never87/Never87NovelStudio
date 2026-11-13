@@ -13,8 +13,9 @@ import { z } from 'zod';
  *   - Entries may carry a SOURCE REFERENCE (`source`) back to the originating
  *     entity so a user can trace an entry to its record. Reference imports are
  *     idempotent: the `source` key is unique per project (see the Service).
- *   - Evidence uses chapter/scene-level source identification at minimum, with
- *     optional quote and offset for precise positioning.
+ *   - Evidence uses chapter/scene-level source identification at minimum (or an
+ *     optional imported-document section locator), with optional quote and
+ *     offset for precise positioning.
  *
  * tsconfig constraints honoured here:
  *   - `erasableSyntaxOnly`: no `enum`; literal unions + `z.enum`.
@@ -26,11 +27,42 @@ import { z } from 'zod';
 /* -------------------------------------------------------------------------- */
 
 /**
+ * OPTIONAL import provenance linking an `Evidence` locator back to a raw
+ * `SourceDocument` section (P8 Project Integration).
+ *
+ * P7's `Evidence` is chapter/scene-oriented; an entry integrated from an
+ * imported document has no chapter/scene ids yet, so it carries this precise
+ * `DocumentEvidence`-style locator instead (with `chapterId`/`sceneId` `null`).
+ * This is ADDITIVE and optional, so every pre-existing evidence object — and
+ * every hand-authored one — remains valid unchanged.
+ */
+export const EvidenceSourceSchema = z
+  .object({
+    /** The imported source document the quote came from. */
+    documentId: z.string().min(1, 'A source documentId is required'),
+    /** The document section the quote was located in. */
+    sectionId: z.string().min(1, 'A source sectionId is required'),
+    /** Section-relative start offset (UTF-16 code units), inclusive. */
+    start: z.number().int().nonnegative(),
+    /** Section-relative end offset (UTF-16 code units), exclusive. */
+    end: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine((source) => source.end >= source.start, {
+    message: 'Evidence source end must not be earlier than start',
+    path: ['end'],
+  });
+
+export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
+
+/**
  * Where a fact/finding was drawn from.
  *
- * Chapter/scene-level identification is the MINIMUM. `quote` and `offset` are
- * OPTIONAL and add precise positioning inside the source, but never replace the
- * locator (a quote alone — without a chapter/scene — is not evidence).
+ * Chapter/scene-level identification is the MINIMUM — UNLESS the evidence is
+ * import-derived, in which case an `EvidenceSource` (document-section locator)
+ * substitutes for it. `quote` and `offset` are OPTIONAL and add precise
+ * positioning inside the source, but never replace the locator (a quote alone —
+ * without a chapter/scene/document-section — is not evidence).
  *
  * `offset` is a character offset into the source scene/chapter prose when known.
  */
@@ -46,11 +78,13 @@ export const EvidenceSchema = z
     offset: z.number().int('Offset must be an integer').nonnegative('Offset must be non-negative').nullable(),
     /** Free-form note on where/why this evidence applies. */
     note: z.string().max(2_000, 'A note must be at most 2000 characters').default(''),
+    /** Import provenance (P8 Project Integration), when derived from a document. */
+    source: EvidenceSourceSchema.optional(),
   })
   .strict()
-  // At minimum, a chapter OR a scene locator must be present.
-  .refine((evidence) => Boolean(evidence.chapterId) || Boolean(evidence.sceneId), {
-    message: 'Evidence must reference a chapter or a scene',
+  // At minimum, a chapter, a scene OR an imported document section must locate it.
+  .refine((evidence) => Boolean(evidence.chapterId) || Boolean(evidence.sceneId) || Boolean(evidence.source), {
+    message: 'Evidence must reference a chapter, a scene or an imported document section',
     path: ['chapterId'],
   });
 

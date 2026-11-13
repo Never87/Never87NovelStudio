@@ -10,6 +10,7 @@ export type {
   KnowledgeSource,
   KnowledgeSourceRef,
   Evidence,
+  EvidenceSource,
 } from '@/schemas/knowledge';
 export {
   KNOWLEDGE_ENTRY_KINDS,

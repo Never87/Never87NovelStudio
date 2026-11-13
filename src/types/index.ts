@@ -90,6 +90,7 @@ export type {
   KnowledgeSource,
   KnowledgeSourceRef,
   Evidence,
+  EvidenceSource,
 } from '@/types/knowledge';
 export {
   KNOWLEDGE_ENTRY_KINDS,
@@ -150,6 +151,8 @@ export type {
   IntegrationStatus,
   IntegrationTargetType,
   IntegrationConflict,
+  ConflictStrategy,
+  ConflictResolution,
 } from '@/types/extraction';
 export {
   EXTRACTION_KINDS,
@@ -157,8 +160,10 @@ export {
   EXTRACTION_REVIEW_STATUSES,
   INTEGRATION_STATUSES,
   INTEGRATION_TARGET_TYPES,
+  CONFLICT_STRATEGIES,
   buildDedupeKey,
   normaliseForKey,
   MAX_EXTRACTION_BODY_CHARS,
 } from '@/schemas/extraction';
+
 

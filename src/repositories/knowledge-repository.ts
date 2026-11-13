@@ -23,6 +23,15 @@ export class KnowledgeRepository {
     this.table = database.knowledgeEntries;
   }
 
+  /**
+   * The underlying Dexie table, exposed ONLY so a composing service (Project
+   * Integration) can include it in a shared transaction scope. All reads/writes
+   * still go through the validated methods above.
+   */
+  get dexieTable(): Table<KnowledgeEntry, string> {
+    return this.table;
+  }
+
   async getById(id: string): Promise<KnowledgeEntry | null> {
     let row: KnowledgeEntry | undefined;
     try {

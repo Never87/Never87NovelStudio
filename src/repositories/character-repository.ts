@@ -20,6 +20,15 @@ export class CharacterRepository {
     this.table = database.characters;
   }
 
+  /**
+   * The underlying Dexie table, exposed ONLY so a composing service (Project
+   * Integration) can include it in a shared transaction scope. All reads/writes
+   * still go through the validated methods below.
+   */
+  get dexieTable(): Table<Character, string> {
+    return this.table;
+  }
+
   /** Returns the character with `id`, or `null` when it does not exist. */
   async getById(id: string): Promise<Character | null> {
     let character: Character | undefined;

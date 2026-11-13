@@ -36,3 +36,18 @@ export {
 } from '../../src/utils/document-parser';
 export { ImportRepository } from '../../src/repositories/import-repository';
 export { ProjectRepositoryError, ProjectValidationError } from '../../src/repositories/project-repository';
+export {
+  ImportService,
+  ImportServiceError,
+  ImportNotFoundError,
+  ImportConflictError,
+  hashText,
+} from '../../src/services/import-service';
+export {
+  hashRawText,
+  sha256Hex,
+  utf8Bytes,
+  isCurrentHashFormat,
+  HASH_ALGORITHM,
+  HASH_PREFIX,
+} from '../../src/utils/text-hash';

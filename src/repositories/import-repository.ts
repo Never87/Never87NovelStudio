@@ -288,6 +288,48 @@ export class ImportRepository {
     }
   }
 
+  /**
+   * Runs `fn` inside a single readwrite Dexie transaction over the extraction
+   * table, so an idempotent-upsert caller's find→create/update sequence is
+   * atomic: two concurrent submissions cannot both observe "no existing row"
+   * and insert duplicates (and a mid-way throw rolls everything back).
+   *
+   * Exposed narrowly (only the extraction table) so the extraction service can
+   * compose its own transactional logic without reaching into table internals.
+   */
+  async runExtractionTransaction<T>(
+    fn: () => Promise<T>,
+    /**
+     * Optional EXTRA tables to include in the transaction scope (P8 Batch 5).
+     * Project Integration writes a target entity (e.g. `knowledgeEntries`,
+     * `characters`, `worlds`) in the SAME transaction as the extraction's
+     * `integration` stamp, so an entity write and its record marker commit — or
+     * roll back — together. Defaults to none: extraction/review callers are
+     * unaffected.
+     */
+    additionalTables: unknown[] = [],
+  ): Promise<T> {
+    try {
+      // Scope over ALL THREE P8 tables: extraction/review services re-read the
+      // source document and its sections inside this transaction to re-validate
+      // evidence against the CURRENT raw text before writing. A transaction scoped
+      // to the extraction table alone makes those reads throw
+      // `NotFoundError: The specified object store was not found` (surfaced as a bogus
+      // `Failed to read source document …`) before any domain logic runs. Declaring
+      // all three tables keeps the reads valid while preserving atomicity.
+      const scope = [this.documents, this.sections, this.extractions, ...additionalTables];
+      return await this.documents.db.transaction('rw', scope as never, fn);
+    } catch (error) {
+      // Domain/business errors thrown INSIDE the transaction (e.g. a service's
+      // ReviewValidationError for a cross-project target or an ineligible state)
+      // must propagate UNCHANGED so callers can branch on the specific reason.
+      // Only genuine storage/transaction failures are wrapped as repository
+      // errors. Anything already carrying a domain error identity is rethrown.
+      if (isDomainError(error)) throw error;
+      throw new ProjectRepositoryError('Failed to run extraction transaction', error);
+    }
+  }
+
   /* --------------------------- Cascade deletes -------------------------- */
 
   /**
@@ -323,6 +365,32 @@ export class ImportRepository {
 function byUpdatedDesc<T extends { updatedAt: number; id: string }>(a: T, b: T): number {
   if (a.updatedAt === b.updatedAt) return a.id < b.id ? 1 : -1;
   return b.updatedAt - a.updatedAt;
+}
+
+/**
+ * True when `error` is a domain/business error (from a Service or this
+ * repository's own error hierarchy) rather than a storage/transaction failure.
+ * Used to decide whether `runExtractionTransaction` should wrap an error or let
+ * it propagate untouched — a half-run transaction that threw a
+ * `ReviewValidationError` must surface that specific reason, not a generic
+ * "transaction failed" wrapper.
+ */
+function isDomainError(error: unknown): boolean {
+  if (error instanceof ProjectRepositoryError || error instanceof ProjectValidationError) return true;
+  if (error instanceof Error) {
+    const name = error.name;
+    if (
+      name === 'ProjectServiceError' ||
+      name.endsWith('ServiceError') ||
+      name.endsWith('ValidationError') ||
+      name.endsWith('NotFoundError') ||
+      name.endsWith('ConflictError') ||
+      name.endsWith('LockedError')
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function validateDocument(document: SourceDocument): SourceDocument {

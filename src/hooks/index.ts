@@ -35,3 +35,10 @@ export { useContinuity } from './use-continuity';
 export type { UseContinuityResult, ContinuityStatus } from './use-continuity';
 export { useAnalysis } from './use-analysis';
 export type { UseAnalysisResult, AnalysisStatus } from './use-analysis';
+export { useImportDocuments } from './use-import-documents';
+export type { UseImportDocumentsResult, ImportDocumentsStatus } from './use-import-documents';
+export { useExtractionReview } from './use-extraction-review';
+export type { UseExtractionReviewResult, ReviewQueueStatus } from './use-extraction-review';
+export { useIntegration } from './use-integration';
+export type { UseIntegrationResult, IntegrationQueueStatus } from './use-integration';
+

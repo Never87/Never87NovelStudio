@@ -1,18 +1,15 @@
-/**
- * Information-extraction domain types.
- *
- * Re-exports only — every type originates from the Zod schemas in
- * `@/schemas/extraction` via `z.infer`.
- */
 export type {
   ExtractionRecord,
   ExtractionKind,
   ExtractionOrigin,
   ExtractionReviewStatus,
   ExtractionIntegration,
+  ExtractionMerge,
   IntegrationStatus,
   IntegrationTargetType,
   IntegrationConflict,
+  ConflictStrategy,
+  ConflictResolution,
 } from '@/schemas/extraction';
 export {
   EXTRACTION_KINDS,
@@ -20,6 +17,8 @@ export {
   EXTRACTION_REVIEW_STATUSES,
   INTEGRATION_STATUSES,
   INTEGRATION_TARGET_TYPES,
+  CONFLICT_STRATEGIES,
+  ExtractionRecordSchema,
   buildDedupeKey,
   normaliseForKey,
   MAX_EXTRACTION_BODY_CHARS,
