@@ -11,7 +11,9 @@ import type {
   ContextConfig,
   ContextItem,
   ContinuityFact,
+  DocumentSection,
   DraftVersion,
+  ExtractionRecord,
   KnowledgeEntry,
   NarrativePlan,
   NovelProject,
@@ -19,6 +21,7 @@ import type {
   PromptTemplateVersion,
   Scene,
   SceneDraft,
+  SourceDocument,
   Volume,
   World,
 } from '@/types';
@@ -76,6 +79,12 @@ export class NovelStudioDb extends Dexie {
   continuityFacts!: Table<ContinuityFact, string>;
   /** Story-analysis findings — many per project (P7). */
   analysisFindings!: Table<AnalysisFinding, string>;
+  /** Imported manuscripts (raw text kept verbatim) — many per project (P8). */
+  sourceDocuments!: Table<SourceDocument, string>;
+  /** Addressable parsed sections of a document — many per document (P8). */
+  documentSections!: Table<DocumentSection, string>;
+  /** Candidate extracted story information — many per document (P8). */
+  extractionRecords!: Table<ExtractionRecord, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -277,6 +286,53 @@ export class NovelStudioDb extends Dexie {
       knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
       continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
       analysisFindings: '&id, projectId, category, status, updatedAt',
+    });
+
+    // v9 — Import & Information Extraction, data foundation (P8).
+    //   sourceDocuments:   &id, projectId, status, updatedAt
+    //                      -> projectId isolates a project's imported documents;
+    //                         status filters by pipeline stage.
+    //   documentSections:  &id, projectId, documentId, [documentId+order], parentId
+    //                      -> documentId lists a document's sections; the compound
+    //                         [documentId+order] orders them without a sort;
+    //                         parentId rebuilds the section tree; projectId cascades.
+    //   extractionRecords: &id, projectId, documentId, kind, reviewStatus, updatedAt, [projectId+dedupeKey]
+    //                      -> projectId isolates; kind/reviewStatus filter the review
+    //                         UI; the compound [projectId+dedupeKey] backs the
+    //                         idempotent lookup. NOTE: a Dexie non-unique index
+    //                         cannot ENFORCE dedupe uniqueness — the importer runs
+    //                         the "find-by-key-then-update-else-insert" logic inside
+    //                         a single readwrite transaction so concurrent callers
+    //                         cannot create duplicates.
+    //
+    // Purely ADDITIVE: every v1-v8 store is restated verbatim so ALL existing data
+    // (projects through P7 analysis) survives the upgrade untouched. No data
+    // mutation is required: the three new stores start empty.
+    this.version(9).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, [projectId+dedupeKey]',
     });
   }
 }

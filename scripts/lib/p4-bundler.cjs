@@ -28,8 +28,11 @@ function projectPath(...segments) {
  *
  * @param {string} entry project-relative entry, e.g. 'src/utils/manuscript-text.ts'
  * @param {string} [name] bundling target name, used for the cache-busting temp file
+ * @param {{ alias?: Record<string,string> }} [options]
+ *   Optional Vite `resolve.alias` map (configFile is disabled, so the `@/`
+ *   alias from vite.config.ts is NOT active unless supplied here).
  */
-async function importBundled(entry, name = 'bundle') {
+async function importBundled(entry, name = 'bundle', options = {}) {
   const vite = await import(
     pathToFileURL(path.join(ROOT, 'node_modules', 'vite', 'dist', 'node', 'index.js')).href
   );
@@ -41,6 +44,7 @@ async function importBundled(entry, name = 'bundle') {
     configFile: false,
     logLevel: 'silent',
     root: ROOT,
+    resolve: options.alias ? { alias: options.alias } : undefined,
     build: {
       write: true,
       minify: false,

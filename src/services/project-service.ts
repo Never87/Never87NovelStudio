@@ -20,6 +20,7 @@ import { ContextRepository } from '@/repositories/context-repository';
 import { KnowledgeRepository } from '@/repositories/knowledge-repository';
 import { ContinuityRepository } from '@/repositories/continuity-repository';
 import { AnalysisRepository } from '@/repositories/analysis-repository';
+import { ImportRepository } from '@/repositories/import-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -95,6 +96,7 @@ export class ProjectService {
   private readonly knowledgeRepository: KnowledgeRepository;
   private readonly continuityRepository: ContinuityRepository;
   private readonly analysisRepository: AnalysisRepository;
+  private readonly importRepository: ImportRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -109,6 +111,7 @@ export class ProjectService {
     knowledgeRepository: KnowledgeRepository = new KnowledgeRepository(),
     continuityRepository: ContinuityRepository = new ContinuityRepository(),
     analysisRepository: AnalysisRepository = new AnalysisRepository(),
+    importRepository: ImportRepository = new ImportRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -122,6 +125,7 @@ export class ProjectService {
     this.knowledgeRepository = knowledgeRepository;
     this.continuityRepository = continuityRepository;
     this.analysisRepository = analysisRepository;
+    this.importRepository = importRepository;
   }
 
   /**
@@ -272,6 +276,9 @@ export class ProjectService {
       await this.analysisRepository.deleteByProjectId(id);
       await this.continuityRepository.deleteByProjectId(id);
       await this.knowledgeRepository.deleteByProjectId(id);
+      // P8: imported documents + their sections + extraction records. The
+      // repository deletes child-first (extraction → sections → documents).
+      await this.importRepository.deleteByProjectId(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

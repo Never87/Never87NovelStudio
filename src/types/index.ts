@@ -125,3 +125,40 @@ export {
   ANALYSIS_ORIGINS,
 } from '@/schemas/analysis';
 
+/* --------------------------- P8 — Import & Extraction --------------------- */
+export type {
+  SourceDocument,
+  DocumentSection,
+  DocumentEvidence,
+  DocumentFormat,
+  DocumentStatus,
+  DocumentSectionLevel,
+} from '@/types/document';
+export {
+  DOCUMENT_FORMATS,
+  DOCUMENT_STATUSES,
+  DOCUMENT_SECTION_LEVELS,
+  MAX_DOCUMENT_CHARS,
+  evidenceQuoteMatches,
+} from '@/schemas/document';
+export type {
+  ExtractionRecord,
+  ExtractionKind,
+  ExtractionOrigin,
+  ExtractionReviewStatus,
+  ExtractionIntegration,
+  IntegrationStatus,
+  IntegrationTargetType,
+  IntegrationConflict,
+} from '@/types/extraction';
+export {
+  EXTRACTION_KINDS,
+  EXTRACTION_ORIGINS,
+  EXTRACTION_REVIEW_STATUSES,
+  INTEGRATION_STATUSES,
+  INTEGRATION_TARGET_TYPES,
+  buildDedupeKey,
+  normaliseForKey,
+  MAX_EXTRACTION_BODY_CHARS,
+} from '@/schemas/extraction';
+

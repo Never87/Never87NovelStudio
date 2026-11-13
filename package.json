@@ -27,7 +27,8 @@
     "verify:prompt": "node scripts/p6-verify.cjs",
     "verify:prompt:ui": "node scripts/p6-ui-verify.cjs",
     "verify:knowledge": "node scripts/p7-verify.cjs",
-    "verify:knowledge:ui": "node scripts/p7-ui-verify.cjs"
+    "verify:knowledge:ui": "node scripts/p7-ui-verify.cjs",
+    "verify:import": "node scripts/p8-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",

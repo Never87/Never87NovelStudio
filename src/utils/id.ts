@@ -33,6 +33,10 @@ export const ID_PREFIX = {
   knowledgeEntry: 'know',
   continuityFact: 'cont',
   analysisFinding: 'find',
+  // P8 — Import & Information Extraction.
+  sourceDocument: 'doc',
+  documentSection: 'dsec',
+  extractionRecord: 'ext',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -154,5 +158,20 @@ export function createContinuityFactId(): string {
 /** Convenience wrapper for story-analysis finding ids. */
 export function createAnalysisFindingId(): string {
   return createId(ID_PREFIX.analysisFinding);
+}
+
+/** Convenience wrapper for imported source-document ids. */
+export function createSourceDocumentId(): string {
+  return createId(ID_PREFIX.sourceDocument);
+}
+
+/** Convenience wrapper for document-section ids. */
+export function createDocumentSectionId(): string {
+  return createId(ID_PREFIX.documentSection);
+}
+
+/** Convenience wrapper for extraction-record ids. */
+export function createExtractionRecordId(): string {
+  return createId(ID_PREFIX.extractionRecord);
 }
 
