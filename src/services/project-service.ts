@@ -17,6 +17,9 @@ import { SceneRepository } from '@/repositories/scene-repository';
 import { ManuscriptRepository } from '@/repositories/manuscript-repository';
 import { PromptRepository } from '@/repositories/prompt-repository';
 import { ContextRepository } from '@/repositories/context-repository';
+import { KnowledgeRepository } from '@/repositories/knowledge-repository';
+import { ContinuityRepository } from '@/repositories/continuity-repository';
+import { AnalysisRepository } from '@/repositories/analysis-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -89,6 +92,9 @@ export class ProjectService {
   private readonly manuscriptRepository: ManuscriptRepository;
   private readonly promptRepository: PromptRepository;
   private readonly contextRepository: ContextRepository;
+  private readonly knowledgeRepository: KnowledgeRepository;
+  private readonly continuityRepository: ContinuityRepository;
+  private readonly analysisRepository: AnalysisRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -100,6 +106,9 @@ export class ProjectService {
     manuscriptRepository: ManuscriptRepository = new ManuscriptRepository(),
     promptRepository: PromptRepository = new PromptRepository(),
     contextRepository: ContextRepository = new ContextRepository(),
+    knowledgeRepository: KnowledgeRepository = new KnowledgeRepository(),
+    continuityRepository: ContinuityRepository = new ContinuityRepository(),
+    analysisRepository: AnalysisRepository = new AnalysisRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -110,6 +119,9 @@ export class ProjectService {
     this.manuscriptRepository = manuscriptRepository;
     this.promptRepository = promptRepository;
     this.contextRepository = contextRepository;
+    this.knowledgeRepository = knowledgeRepository;
+    this.continuityRepository = continuityRepository;
+    this.analysisRepository = analysisRepository;
   }
 
   /**
@@ -255,6 +267,11 @@ export class ProjectService {
       // project-owned and must not survive their project.
       await this.promptRepository.deleteAllByProject(id);
       await this.contextRepository.deleteAllByProject(id);
+      // P7: knowledge, continuity and analysis findings are project-owned too.
+      // Findings reference continuity facts/entries, so remove them first.
+      await this.analysisRepository.deleteByProjectId(id);
+      await this.continuityRepository.deleteByProjectId(id);
+      await this.knowledgeRepository.deleteByProjectId(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

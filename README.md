@@ -6,11 +6,13 @@ helps, always with a human in the loop.
 
 **Live site:** <https://never87.github.io/>
 
-> **Status: P4 (complete).** The shell, design system, routing, theme and project CRUD (P1)
+> **Status: P7 (complete).** The shell, design system, routing, theme and project CRUD (P1)
 > are complete. World building, characters (P2-A), narrative planning (P2-B),
-> outline & scene planning (P3) and the writing editor with autosave (P4) are live and
-> persisted in IndexedDB. All other modules remain routed placeholders — no AI calls and no
-> file imports yet. The dashboard uses clearly-labelled demo data.
+> outline & scene planning (P3), the writing editor with autosave (P4), AI providers &
+> assistance (P5), Prompt Engineering Center & AI Context Manager (P6), and the Knowledge
+> Base, Continuity Manager & Plot Hole Detector (P7) are live and persisted in IndexedDB.
+> Publishing & export (P8) remains a routed placeholder. The dashboard uses
+> clearly-labelled demo data.
 
 ## Tech stack
 
@@ -49,6 +51,12 @@ npm run dev        # http://localhost:5173
 | `npm run verify:markdown` | Unit tests for P4 Markdown parsing/statistics helpers |
 | `npm run verify:writing` | End-to-end check of P4 (manuscript drafts, versions, import/export) data layer |
 | `npm run verify:writing:ui` | UI smoke test of P4: type, autosave, reload, chapter switch |
+| `npm run verify:ai` | Unit checks for P5 (adapters, diff, redaction, continue anchor) |
+| `npm run verify:ai:ui` | UI smoke test of P5: provider/model, editor AI actions |
+| `npm run verify:prompt` | Logic checks for P6 (template versioning, context assembly, budget, import conflicts) |
+| `npm run verify:prompt:ui` | UI smoke test of P6: templates & context manager |
+| `npm run verify:knowledge` | Logic checks for P7 (knowledge idempotent import, continuity reconstruction, evidence-backed analysis) |
+| `npm run verify:knowledge:ui` | UI smoke test of P7: knowledge base, continuity, plot-hole detector |
 
 ## Architecture notes
 
@@ -154,9 +162,9 @@ public/
 | **P2** | World building & characters ✅ · Narrative planning ✅ |
 | **P3** | Outline (volumes → chapters) & scene planning ✅ |
 | **P4** | Story editor (chapter manuscript, autosave, versions, import/export) ✅ |
-| P5 | AI providers & assistance |
-| P6 | Import & analysis pipeline |
-| P7 | Knowledge base & continuity |
+| **P5** | AI providers & assistance ✅ |
+| **P6** | Import & analysis pipeline · Prompt Engineering Center & Context Manager ✅ |
+| **P7** | Knowledge base, continuity & story analysis ✅ |
 | P8 | Publishing & export |
 | P9 | Versioning & backup |
 

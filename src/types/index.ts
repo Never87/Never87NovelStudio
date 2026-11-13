@@ -83,3 +83,45 @@ export {
   DEFAULT_REQUESTED_OUTPUT_TOKENS,
 } from '@/schemas/context';
 
+/* ------------------------ P7 — Knowledge & Analysis ----------------------- */
+export type {
+  KnowledgeEntry,
+  KnowledgeEntryKind,
+  KnowledgeSource,
+  KnowledgeSourceRef,
+  Evidence,
+} from '@/types/knowledge';
+export {
+  KNOWLEDGE_ENTRY_KINDS,
+  KNOWLEDGE_SOURCES,
+  buildSourceKey,
+  deriveSearchText,
+} from '@/schemas/knowledge';
+export type {
+  ContinuityFact,
+  ContinuitySubjectType,
+  ContinuityPredicate,
+  ReconstructedStateValue,
+  LiveRankLookup,
+} from '@/types/continuity';
+export {
+  CONTINUITY_SUBJECT_TYPES,
+  CONTINUITY_PREDICATES,
+  compareFacts,
+  reconstructState,
+  stateKey,
+} from '@/schemas/continuity';
+export type {
+  AnalysisFinding,
+  AnalysisCategory,
+  AnalysisSeverity,
+  AnalysisStatus,
+  AnalysisOrigin,
+} from '@/types/analysis';
+export {
+  ANALYSIS_CATEGORIES,
+  ANALYSIS_SEVERITIES,
+  ANALYSIS_STATUSES,
+  ANALYSIS_ORIGINS,
+} from '@/schemas/analysis';
+

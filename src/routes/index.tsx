@@ -94,6 +94,22 @@ const ContextManagerPage = lazy(async () => {
   return { default: mod.ContextManagerPanel };
 });
 
+/** Knowledge Base, Continuity & Story Analysis (P7) — real pages. */
+const KnowledgeBasePage = lazy(async () => {
+  const mod = await import('@/modules/ai/KnowledgeBasePanel');
+  return { default: mod.KnowledgeBasePanel };
+});
+
+const ContinuityManagerPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ContinuityManagerPanel');
+  return { default: mod.ContinuityManagerPanel };
+});
+
+const PlotHoleDetectorPage = lazy(async () => {
+  const mod = await import('@/modules/ai/PlotHoleDetectorPanel');
+  return { default: mod.PlotHoleDetectorPanel };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -105,6 +121,9 @@ const REAL_PAGE_NAV_IDS = new Set([
   'ai-assistance',
   'prompt-templates',
   'context-manager',
+  'knowledge-base',
+  'continuity',
+  'plot-hole',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -138,6 +157,10 @@ export const router = createBrowserRouter(
         // Prompt Engineering Center & Context Manager (P6).
         { path: 'ai/prompt-templates', element: withRouteSuspense(<PromptTemplatesPage />) },
         { path: 'ai/context-manager', element: withRouteSuspense(<ContextManagerPage />) },
+        // Knowledge Base, Continuity & Story Analysis (P7).
+        { path: 'ai/knowledge-base', element: withRouteSuspense(<KnowledgeBasePage />) },
+        { path: 'ai/continuity-manager', element: withRouteSuspense(<ContinuityManagerPage />) },
+        { path: 'ai/plot-hole-detector', element: withRouteSuspense(<PlotHoleDetectorPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },

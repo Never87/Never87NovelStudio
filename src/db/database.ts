@@ -4,12 +4,15 @@ import type {
   AiModel,
   AiProvider,
   AiTaskConfig,
+  AnalysisFinding,
   Chapter,
   ChapterDraft,
   Character,
   ContextConfig,
   ContextItem,
+  ContinuityFact,
   DraftVersion,
+  KnowledgeEntry,
   NarrativePlan,
   NovelProject,
   PromptTemplate,
@@ -67,6 +70,12 @@ export class NovelStudioDb extends Dexie {
   contextItems!: Table<ContextItem, string>;
   /** Per-project context configuration — one row per project (P6). */
   contextConfigs!: Table<ContextConfig, string>;
+  /** Searchable knowledge-base entries — many per project (P7). */
+  knowledgeEntries!: Table<KnowledgeEntry, string>;
+  /** Event-sourced continuity facts — many per project (P7). */
+  continuityFacts!: Table<ContinuityFact, string>;
+  /** Story-analysis findings — many per project (P7). */
+  analysisFindings!: Table<AnalysisFinding, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -225,6 +234,49 @@ export class NovelStudioDb extends Dexie {
       promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
       contextItems: '&id, projectId, layer, updatedAt',
       contextConfigs: '&id, &projectId, updatedAt',
+    });
+
+    // v8 — Knowledge Base, Continuity & Story Analysis (P7).
+    //   knowledgeEntries:  &id, projectId, kind, source, updatedAt, [projectId+sourceKey]
+    //                      -> projectId lists a project's entries; kind/source back
+    //                         filtering; the compound [projectId+sourceKey] index
+    //                         backs the IDEMPOTENT import lookup (one entry per
+    //                         origin entity per project). `sourceKey` is a
+    //                         denormalised copy of `sourceRef.key` so it can be
+    //                         indexed (Dexie cannot index a nested object field).
+    //   continuityFacts:   &id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt
+    //                      -> projectId isolates facts; the compound index groups a
+    //                         chapter's facts for point-in-time reconstruction;
+    //                         subjectId/predicate support per-subject queries.
+    //   analysisFindings:  &id, projectId, category, status, updatedAt
+    //                      -> projectId lists findings; category/status filter.
+    //
+    // Purely ADDITIVE: every v1-v7 store is restated verbatim so ALL existing
+    // data (projects through P6 context) survives the upgrade untouched. The new
+    // `sourceKey` field is denormalised by the P7 KnowledgeService on write and
+    // needs no data mutation for pre-existing rows (there are none at v8).
+    this.version(8).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
     });
   }
 }

@@ -12,6 +12,9 @@ import { AiAssistanceService } from './ai-assistance-service';
 import { PromptTemplateService } from './prompt-template-service';
 import { ContextManagerService } from './context-manager-service';
 import { ContextAssemblyService } from './context-assembly-service';
+import { KnowledgeService } from './knowledge-service';
+import { ContinuityService } from './continuity-service';
+import { AnalysisService } from './analysis-service';
 
 /**
  * Module-level application Services.
@@ -54,6 +57,18 @@ export const aiAssistanceService = new AiAssistanceService(aiService);
 export const promptTemplateService = new PromptTemplateService();
 export const contextManagerService = new ContextManagerService();
 export const contextAssemblyService = new ContextAssemblyService({ aiService });
+
+/**
+ * Knowledge Base, Continuity & Story Analysis services (P7).
+ *
+ * `knowledgeService` indexes/search existing project entities;
+ * `continuityService` owns the event-sourced fact log and point-in-time
+ * reconstruction; `analysisService` runs deterministic detectors (and exposes
+ * optional, explicit AI-assisted proposals) producing evidence-backed findings.
+ */
+export const knowledgeService = new KnowledgeService();
+export const continuityService = new ContinuityService();
+export const analysisService = new AnalysisService();
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -161,3 +176,25 @@ export type { ParsedPlaceholder, RenderResult, TemplateValidationIssue } from '.
 export { estimateTokens, estimateMessagesTokens } from './ai/token-estimator';
 export { BUILTIN_TEMPLATES } from './ai/builtin-templates';
 export type { BuiltinTemplate } from './ai/builtin-templates';
+
+/* ------------------------ Knowledge & Analysis (P7) ---------------------- */
+
+export { KnowledgeService } from './knowledge-service';
+export type {
+  CreateKnowledgeInput,
+  UpdateKnowledgeInput,
+  ImportKnowledgeResult,
+  KnowledgeSearchResult,
+} from './knowledge-service';
+export { ContinuityService } from './continuity-service';
+export type {
+  CreateContinuityFactInput,
+  UpdateContinuityFactInput,
+  SubjectState,
+} from './continuity-service';
+export { AnalysisService } from './analysis-service';
+export type {
+  FindingDraft,
+  RunAnalysisResult,
+  UpdateFindingInput,
+} from './analysis-service';

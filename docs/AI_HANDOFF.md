@@ -617,3 +617,203 @@ P6 在 R1–R10 上均满足；本次修复了 R6（同名异内容不再静默�
 两处语义缺口，并补充了针对性测试。全部 P1–P6 测试、类型检查与生产构建通过。
 **建议判定：PASS（含第 14.8 节所列、不阻塞范围的已知限制）。**
 
+---
+
+## 15. P7（Knowledge Base · Continuity · Story Analysis）交接
+
+> 本节为 P7 追加，P4–P6 正文未改动。所有描述基于磁盘代码与真机实测。
+
+### 15.1 交付范围
+
+- **Knowledge Base**（`/ai/knowledge-base`）：结构化知识条目（character/location/faction/
+  rule/event/item/concept/term）的增删改查、客户端搜索（全部关键词 AND）、以及**一键索引**现有
+  项目实体（角色 / 世界观 + 分区 / 章节 / 场景 / 叙事规划）。索引**幂等**：重复运行只刷新不重复，
+  每条导入条目保留**可追溯来源引用**（`source` / `sourceKey` / `sourceRef`）。
+- **Continuity Manager**（`/ai/continuity-manager`）：事件溯源式「连续性事实」日志（谁在哪 /
+  持有何物 / 知晓何事 / 关系 / 状态 / 属性），锚定到章节（可选场景）。展示「当前状态」与
+  「某章节时点状态」两种**确定性重建**。重建始终按**实时大纲顺序**计算，章节重排后自动正确。
+- **Plot Hole Detector**（`/ai/plot-hole-detector`）：确定性检测器（同一章节内同主体同谓词的
+  矛盾、死亡后仍有动作、未回收的伏笔）。**用户点击才运行**，无后台扫描；每条发现**至少携带
+  一条带定位的 evidence**（章节或场景），schema 与 Service 双向拒绝无证据发现。发现是审查
+  数据：确认 / 驳回 / 解决 / 删除，绝不修改正文。
+
+### 15.2 架构不变量
+
+1. **证据必达**：`AnalysisFindingSchema` 要求 `evidence` 非空，且每条 evidence 必须含
+   `chapterId` 或 `sceneId`；`AnalysisService.saveDraft/runDeterministic` 同样拒绝无证据发现
+   （双保险，逻辑与真库均验证）。
+2. **事件溯源、非可变快照**：连续性状态由事实日志按 `(subject, predicate)` 折叠得出；没有任何
+   可变的每角色快照。`anchorRank` 由**实时大纲顺序**派生，故章节重排会改变重建结果（已实测）。
+3. **只读分析**：检测只读取连续性事实与知识条目，不写入正文、不改动项目数据。
+4. **分层不变**：UI → hooks（`useKnowledgeBase`/`useContinuity`/`useAnalysis`）→ services →
+   repositories → Dexie；UI 不直接触库。项目删除级联清理三张新表（已实测）。
+
+### 15.3 数据模型（Dexie `version(8)`，纯附加）
+
+| 表 | 索引 | 说明 |
+| --- | --- | --- |
+| `knowledgeEntries` | `&id, projectId, kind, source, updatedAt, [projectId+sourceKey]` | 结构化知识；复合 `[projectId+sourceKey]` 支撑幂等导入 |
+| `continuityFacts` | `&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt` | 追加/可编辑的事实日志 |
+| `analysisFindings` | `&id, projectId, category, status, severity, updatedAt` | 证据支撑的审查发现 |
+
+### 15.4 关键实现说明
+
+- **幂等导入 + 对账**：`KnowledgeService.importFromProject` 以
+  `buildSourceKey(source, entityId, subKey)` 定位已有条目；存在则刷新（内容/标题/摘要/标签合并、
+  保留用户证据），否则新建。导入后**对账**：删除 `source` 非 `manual` 且 `sourceKey` 已不在当前
+  存活集合中的索引条目，使已删除来源不会残留误导性条目；手工条目永不删除。
+- **搜索**：`deriveSearchText` 预计算小写 `searchText`；`search()` 按空白切词并**全部命中**，
+  空查询返回全部。客户端搜索（项目条目集有界、已在内存），严格按项目隔离。
+- **重建**：`compareFacts` 以 `anchorRank` 优先、其后 `createdAt`、再 `id` 稳定排序；
+  `reconstructState(facts, { stopRank })` 折叠出每 `(subject, predicate)` 的最新值。`stopRank`
+  为「到该章节为止（含）」。
+- **检测器**（`AnalysisService.runDeterministic`）：同一章节内同主体同谓词冲突；`status=deceased`
+  后仍有后续动作；`foreshadowing` 标签且无回收证据的条目。全部产出带证据的 `FindingDraft`；
+  `saveDraft` 额外校验 evidence 的章节/场景属于该项目（`assertEvidenceInProject`）。
+
+### 15.5 文件清单（P7 新增 / 修改）
+
+**Schemas / types**
+
+- `src/schemas/knowledge.ts`、`src/schemas/continuity.ts`、`src/schemas/analysis.ts`
+  （持久化真源；`EvidenceSchema`、`compareFacts`、`reconstructState`、`stateKey`、
+  `deriveSearchText`、`buildSourceKey`、各字面量联合）。
+- `src/types/index.ts`（再导出 P7 类型与联合）。
+
+**Repositories**
+
+- `src/repositories/knowledge-repository.ts`、`continuity-repository.ts`、`analysis-repository.ts`。
+
+**Services**
+
+- `src/services/knowledge-service.ts`（CRUD、幂等导入 + 对账、搜索、级联）。
+- `src/services/continuity-service.ts`（事实 CRUD、`currentState`、`stateAsOf`、anchor 校验、
+  孤儿锚点过滤 `withoutOrphanedAnchors`）。
+- `src/services/analysis-service.ts`（`runDeterministic`、`saveDraft`、`updateFinding`、
+  `deleteFinding`、`listFindings`；evidence 项目内定位校验）。
+- `src/services/index.ts`（单例与导出）。
+
+**Hooks**
+
+- `src/hooks/use-knowledge-base.ts`、`use-continuity.ts`、`use-analysis.ts`；`src/hooks/index.ts`。
+
+**UI（`src/modules/ai/`）**
+
+- `KnowledgeBasePanel.tsx`、`ContinuityManagerPanel.tsx`、`PlotHoleDetectorPanel.tsx`。
+
+**接入 / 修改**
+
+- `src/routes/index.tsx`（三个真实页面 + `REAL_PAGE_NAV_IDS` 排除占位）。
+- `src/db/database.ts`（`version(8)` 三张表，纯附加，逐字重述旧 store）。
+- `src/services/project-service.ts`（项目删除级联清理三张表）。
+
+### 15.6 验证脚本与结果（实测）
+
+| 测试 | 命令 | 结果 |
+| --- | --- | --- |
+| 类型检查 | `npx tsc -b --noEmit` | ✅ exit 0 |
+| P7 逻辑（Node + Vite 打包，注入假仓储） | `npm run verify:knowledge` | ✅ **66 / 66** |
+| P7 浏览器/UI（真浏览器 + IndexedDB） | `npm run verify:knowledge:ui` | ✅ **16 / 16** |
+| P6 逻辑回归 | `npm run verify:prompt` | ✅ **82 / 82**（无回归） |
+| 生产构建 | `npm run build` | ✅ exit 0（三个 P7 页面独立分包） |
+
+`verify:knowledge` 覆盖：evidence 定位必填（空/负 offset 拒绝）、finding 无证据被 schema 拒绝、
+`deriveSearchText`/`buildSourceKey` 确定性、`compareFacts` 稳定排序与 tie-break、
+`reconstructState` 最新值/顺序无关/as-of 截止/多谓词、Knowledge 导入幂等 + 来源可追溯 + 搜索
+AND/空查询、Continuity anchor 校验/当前状态/as-of/**重排后重建随实时顺序变化**/更新删除、
+Analysis 检测器仅产证据发现 + `saveDraft` 拒绝无证据 + 审查生命周期、级联隔离。
+本次审计新增断言：**删除锚点章节后重建不再被孤儿事实污染**、**saveDraft 拒绝跨项目/跨章节
+evidence 引用**、**重新索引时清理已删除来源的陈旧条目**。
+
+`verify:knowledge:ui` 覆盖（真库）：三条路由渲染真实页面（非占位）、首导入创建 + 重导入幂等
+（0 新增/全部刷新/总数不变）+ 来源可追溯 + 搜索命中/未命中、连续性当前状态 / as-of、**真实
+`moveChapter` 重排后重建状态随之改变**、分析运行产出且全部证据支撑 + 拒绝无证据、项目删除级联
+清空三表、无未捕获页面异常。
+
+### 15.7 已知限制与风险
+
+1. **检测器为确定性启发式**，覆盖三类高频问题；更复杂的跨章节因果/世界规则校验留待扩展，且
+   均须遵循「证据必达」不变式。
+2. **知识搜索为客户端 AND 子串匹配**（非向量/模糊）；来源索引不包含全部实体（如角色关系图细节），
+   以现有实体粒度为准。
+3. **连续性 `anchorRank` 依赖大纲查询**：若在服务外用非大纲路径改动章节顺序，需重新刷新状态；
+   正常 UI/服务路径（`moveChapter`/`updateChapter`）已实测正确。
+4. **AI 辅助发现生成未实现（本阶段有意留白）**：`AnalysisService` 目前只有纯确定性检测器，
+   **不存在** `analyzeWithAi` 方法，UI 也无 AI 分析入口。`origin: 'ai'` 仅为保留枚举值；未来接入
+   须经 P6 组装管线、显式用户触发、结果作为**草稿**经 `saveDraft` 审查（该入口已强制证据必达 +
+   项目内定位校验）。
+5. **Timeline Events / Foreshadowing 无独立实体**：项目数据模型中时间线以章节/场景/叙事节拍
+   承载，伏笔以叙事节拍文本启发式打标（`foreshadowing`）。知识索引据此归入 `event`/节拍条目，
+   无独立「时间线事件」表。
+6. **搜索严格按项目隔离**：`search()` 只在**当前项目**条目内检索，不跨项目（符合分层内数据作用域）。
+
+### 15.8 本次审计（验收前完整性审计）的修复记录
+
+针对验收审计任务逐项核对后，修复了三处与「完整性契约」相关的缺口，并同步修正了与实现不符的注释：
+
+1. **删除锚点章节污染重建**（对应「Deleted anchors must not silently produce incorrect state」）：
+   此前 `currentState/stateAsOf` 只把实时 rank 用于**排序**，整条事实日志（含锚点已删章节的
+   孤儿事实）都会被折叠进状态，导致已删章节的事实仍作为「当前值」出现。已在
+   `ContinuityService` 增加 `withoutOrphanedAnchors()`：当**有实时大纲**（`chapterRank` 非空）时，
+   排除 `anchorChapterId` 不在当前大纲中的事实（事实行本身**保留在日志**，只是不进重建视图；
+   无大纲时回退到缓存 rank，避免误删全部）。`stateAsOf` 对已删章节仍抛错。
+   断言见 `verify:knowledge` §7b（基线 lighthouse → 删章后回退 harbour、事实行仍在、asOf 抛错）。
+
+2. **发现 evidence 未做项目内定位校验**（对应「Chapter/Scene references are project-scoped」）：
+   `AnalysisService.saveDraft` 之前只校验 evidence 非空，不校验 `chapterId/sceneId` 是否属于该项目。
+   现注入 `OutlineService/SceneService`，新增 `assertEvidenceInProject()`：`chapterId` 必须属于项目；
+   `sceneId` 必须属于其 `chapterId`（孤立 `sceneId` 必须在项目某章节下），否则拒绝。`runDeterministic`
+   先过滤锚点已删的事实，且对因锚点失效而无法安全落库的草稿**计入 skipped 而非中断整轮**。
+   断言见 `verify:knowledge` §8（拒绝跨项目章节、拒绝跨章节场景、接受项目内合法定位）。
+   注：因该改动 `AnalysisService` 构造新增两个可选依赖（默认真实服务），`p7-verify.cjs` 注入假
+   outline/scene。
+
+3. **重新索引遗留陈旧条目**（对应「Deleted or unavailable source entities do not silently produce
+   misleading entries」）：`importFromProject` 之前只 upsert、不回收，删除角色后再索引会残留
+   指向已删实体的陈旧知识条目。现改为**对账**：先收集当前存活 `sourceKey` 集合，upsert 后删除
+   `source` 非 `manual` 且 `sourceKey` 不在存活集合中的索引条目（手工条目永不删除）。
+   `ImportKnowledgeResult` 新增 `removed` 计数，UI 导入提示如实显示「stale removed」。
+   断言见 `verify:knowledge` §6（删角色再索引后角色索引条目归零、手工条目保留、`removed≥1`）。
+
+4. **注释与实现对齐**：`AnalysisService` 类注释与 `schemas/analysis.ts` 曾声称存在 `analyzeWithAi`
+   且「复用 P5」，实际并无该方法。已改为如实说明「AI 辅助发现本阶段未实现（保留）」，避免误导读代码者。
+
+修复后：`verify:knowledge` 从 56 增至 **66** 项、`verify:knowledge:ui` 仍 16/16、类型检查与
+生产构建通过、P6 及 P1–P4 回归全绿。
+
+### 15.9 完整性契约逐项判定（审计结论）
+
+| 契约项 | 判定 | 证据 |
+| --- | --- | --- |
+| 知识索引覆盖所有要求实体 | ✅（时间线/伏笔见说明） | 角色/地点/阵营/世界规则/历史事件/章节/场景均实测生成对应条目；时间线以章节·场景·节拍承载、伏笔为节拍启发式标签 |
+| 索引幂等（重复运行无重复） | ✅ | `verify:knowledge` §6（secondary imported=0） |
+| 搜索跨相关字段、项目隔离 | ✅ | `search` 用 `searchText`（标题/摘要/正文/标签）AND 匹配；严格按项目 |
+| 删除来源不产生误导性陈旧条目 | ✅（本次修复） | §15.8-3 |
+| 条目可追溯至来源 | ✅ | `sourceKey`/`sourceRef` 断言 |
+| 连续性事实校验到有效存在条目 | ✅ | `createFact/updateFact` 校验章节属于项目、场景属于章节 |
+| 连续性事实锚定并可用 | ✅ | `anchorChapterId` 必填、`verify` 已测 |
+| 事实重建为一致状态 | ✅ | `reconstructState` 确定折叠 |
+| 改动剧情顺序后后续重建反映新顺序 | ✅ | 逻辑 + 真库 `moveChapter` 均断言 |
+| 任意时点重建 | ✅ | `stateAsOf` 到章节（含其场景）为止 |
+| 支持所需谓词 | ✅ | position/possession/knowledge/relationship/status/attribute |
+| 项目删除级联清理 P7 数据 | ✅ | 逻辑 + 真库级联断言（findings→continuity→knowledge 顺序） |
+| 删除锚点不产生错误状态 | ✅（本次修复） | §15.8-1 |
+| 每个发现至少一条证据（schema 拒绝） | ✅ | `evidence.min(1)` + `saveDraft` 双保险 |
+| 证据含定位（章节/场景）与摘要/引用 | ✅ | `EvidenceSchema`（chapterId/sceneId + quote/offset/note） |
+| 发现引用项目内章节/场景 | ✅（本次修复） | §15.8-2 |
+| 发现使用有意义的类别与严重度 | ✅ | 6 类别 × 3 严重度；三类检测器覆盖 |
+| 高置信发现标记来源 | ✅ | `origin: deterministic|ai|manual`（本阶段确定性） |
+| 发现可审查且不与正文冲突 | ✅ | open/confirmed/dismissed/resolved + 只读分析 |
+| 各功能类别存在 AI 辅助 | ❌（时间线/连续性/分析 AI 均未实现，见 §15.7-4） | 确定性检测器为主；AI 路径保留未启用（符合任务「不得重设计」约束） |
+| 证据导航到被引用章节/场景 | ✅（UI 展示定位） | 分析面板逐条渲染 evidence 定位；连续性面板显示锚点章节 |
+
+> AI 辅助分析的缺失为**任务明确允许的范围**（「若缺失，只报告、不重设计/重实现」），已如实
+> 记录于 §15.7-4，不影响完整性契约中「确定性、证据支撑、只读审查」的核心判定。
+
+### 15.10 结论
+
+P7 三个模块均按「幂等 / 证据必达 / 事件溯源 / 只读分析 / 分层不变」实现；本次审计修复了
+「删除锚点污染重建」「evidence 项目内定位校验」「重新索引清理陈旧条目」三处完整性缺口。
+逻辑 **66/66**、真库 UI 16/16、P6 回归 82/82、P1–P4 回归全绿、类型检查与生产构建全部通过。
+**建议判定：PASS（含 §15.7 所列、不阻塞范围的已知限制，以及 §15.9 中如实标注的 AI 辅助分析尚未实现项）。**
+

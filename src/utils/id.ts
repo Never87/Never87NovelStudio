@@ -29,6 +29,10 @@ export const ID_PREFIX = {
   promptTemplateVersion: 'ptv',
   contextItem: 'ctx',
   contextConfig: 'ctxcfg',
+  // P7 — Knowledge Base, Continuity & Story Analysis.
+  knowledgeEntry: 'know',
+  continuityFact: 'cont',
+  analysisFinding: 'find',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -135,5 +139,20 @@ export function createContextItemId(): string {
 /** Convenience wrapper for per-project context-config ids. */
 export function createContextConfigId(): string {
   return createId(ID_PREFIX.contextConfig);
+}
+
+/** Convenience wrapper for knowledge-base entry ids. */
+export function createKnowledgeEntryId(): string {
+  return createId(ID_PREFIX.knowledgeEntry);
+}
+
+/** Convenience wrapper for continuity-fact ids. */
+export function createContinuityFactId(): string {
+  return createId(ID_PREFIX.continuityFact);
+}
+
+/** Convenience wrapper for story-analysis finding ids. */
+export function createAnalysisFindingId(): string {
+  return createId(ID_PREFIX.analysisFinding);
 }
 
