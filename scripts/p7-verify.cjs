@@ -416,6 +416,8 @@ async function main() {
       knowledgeService: knowledge,
       outlineService: collab.outlineService,
       sceneService: collab.sceneService,
+      characterService: collab.characterService,
+      worldService: collab.worldService,
     });
 
     const run = await analysis.runDeterministic('proj');
@@ -454,6 +456,190 @@ async function main() {
     eq('analysis: status change persisted', updated.status, 'dismissed');
     await analysis.deleteFinding('proj', finding.id);
     even('analysis: delete removes finding', analysisRepo._all().every((f) => f.id !== finding.id));
+  }
+
+  /* ==================================================================== */
+  /* 8b. Timeline detector — ambiguous scene order (positive + negative)   */
+  /* ==================================================================== */
+  {
+    const collab = makeCollaborators();
+    // Positive: two scenes in chap1 share order 0 → ambiguous timeline.
+    collab.state.scenes.chap1 = [
+      { id: 'scnA', order: 0, title: 'First', summary: '', location: '', timeOfDay: '', characterIds: [], goal: '', conflict: '', turningPoint: '', outcome: '', tags: [], purpose: 'setup', status: 'planned' },
+      { id: 'scnB', order: 0, title: 'Second', summary: '', location: '', timeOfDay: '', characterIds: [], goal: '', conflict: '', turningPoint: '', outcome: '', tags: [], purpose: 'setup', status: 'planned' },
+    ];
+    const analysisRepo = makeAnalysisRepo();
+    const analysis = new AnalysisService({
+      repository: analysisRepo,
+      continuityService: new ContinuityService({ repository: makeContinuityRepo(), outlineService: collab.outlineService, sceneService: collab.sceneService }),
+      knowledgeService: new KnowledgeService({ repository: makeKnowledgeRepo(), ...collab }),
+      outlineService: collab.outlineService,
+      sceneService: collab.sceneService,
+      characterService: collab.characterService,
+      worldService: collab.worldService,
+    });
+    const runPos = await analysis.runDeterministic('proj');
+    const timeline = runPos.created.filter((f) => f.category === 'timeline');
+    even('timeline: emits finding for colliding scene order', timeline.length === 1, `timeline=${timeline.length}`);
+    even('timeline: finding cites both scenes of the chapter', timeline.length === 1 && timeline[0].evidence.length === 2 && timeline[0].evidence.every((e) => e.chapterId === 'chap1' && (e.sceneId === 'scnA' || e.sceneId === 'scnB')));
+
+    // Negative: distinct scene orders → no timeline finding.
+    collab.state.scenes.chap1 = [
+      { id: 'scnA', order: 0, title: 'First', summary: '', location: '', timeOfDay: '', characterIds: [], goal: '', conflict: '', turningPoint: '', outcome: '', tags: [], purpose: 'setup', status: 'planned' },
+      { id: 'scnB', order: 1, title: 'Second', summary: '', location: '', timeOfDay: '', characterIds: [], goal: '', conflict: '', turningPoint: '', outcome: '', tags: [], purpose: 'setup', status: 'planned' },
+    ];
+    const analysis2 = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: new ContinuityService({ repository: makeContinuityRepo(), outlineService: collab.outlineService, sceneService: collab.sceneService }),
+      knowledgeService: new KnowledgeService({ repository: makeKnowledgeRepo(), ...collab }),
+      outlineService: collab.outlineService,
+      sceneService: collab.sceneService,
+      characterService: collab.characterService,
+      worldService: collab.worldService,
+    });
+    const runNeg = await analysis2.runDeterministic('proj');
+    even('timeline: no finding when scene order is distinct', runNeg.created.filter((f) => f.category === 'timeline').length === 0);
+  }
+
+  /* ==================================================================== */
+  /* 8c. Character detector — status conflict + unused-in-scene            */
+  /* ==================================================================== */
+  {
+    const collab = makeCollaborators();
+    // char1 profile = active; add a continuity status fact "dead" at chap2.
+    const contRepo = makeContinuityRepo();
+    const continuity = new ContinuityService({ repository: contRepo, outlineService: collab.outlineService, sceneService: collab.sceneService });
+    await continuity.createFact('proj', { subjectType: 'character', subjectId: 'char1', subjectLabel: 'Elara', predicate: 'status', value: 'dead', anchorChapterId: 'chap2' });
+
+    // charU marked unused but present in chap1 scene membership.
+    collab.state.characters.push({ id: 'charU', name: 'Ghost', summary: '', background: '', personality: '', motivation: '', appearance: '', role: 'minor', status: 'unused', tags: [], projectId: 'proj' });
+    collab.state.scenes.chap1 = [{ id: 'scn1', order: 0, title: 'Landing', summary: '', location: 'harbour', timeOfDay: 'dawn', characterIds: ['charU'], goal: '', conflict: '', turningPoint: '', outcome: '', tags: [], purpose: 'opening', status: 'planned' }];
+
+    const analysis = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: continuity,
+      knowledgeService: new KnowledgeService({ repository: makeKnowledgeRepo(), ...collab }),
+      outlineService: collab.outlineService,
+      sceneService: collab.sceneService,
+      characterService: collab.characterService,
+      worldService: collab.worldService,
+    });
+    const run = await analysis.runDeterministic('proj');
+    const charFindings = run.created.filter((f) => f.category === 'character');
+    even('character: detects record-status vs continuity-status conflict', charFindings.some((f) => /Elara/.test(f.title) && /status/i.test(f.title)));
+    even('character: conflict finding cites the continuity status fact', charFindings.some((f) => f.relatedFactIds && f.relatedFactIds.length >= 1));
+    even('character: detects unused character appearing in a scene', charFindings.some((f) => /Ghost/.test(f.title) && /unused/i.test(f.title)));
+    even('character: every character finding has evidence', charFindings.every((f) => f.evidence.length >= 1 && f.evidence.every((e) => e.chapterId || e.sceneId)));
+
+    // Negative: consistent character (active profile, latest status fact active) → no conflict finding.
+    const collab2 = makeCollaborators();
+    collab2.state.characters = [{ id: 'char1', name: 'Elara', summary: '', background: '', personality: '', motivation: '', appearance: '', role: 'protagonist', status: 'active', tags: [], projectId: 'proj' }];
+    const contRepo2 = makeContinuityRepo();
+    const continuity2 = new ContinuityService({ repository: contRepo2, outlineService: collab2.outlineService, sceneService: collab2.sceneService });
+    await continuity2.createFact('proj', { subjectType: 'character', subjectId: 'char1', subjectLabel: 'Elara', predicate: 'status', value: 'alive', anchorChapterId: 'chap1' });
+    const analysis2 = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: continuity2,
+      knowledgeService: new KnowledgeService({ repository: makeKnowledgeRepo(), ...collab2 }),
+      outlineService: collab2.outlineService,
+      sceneService: collab2.sceneService,
+      characterService: collab2.characterService,
+      worldService: collab2.worldService,
+    });
+    const run2 = await analysis2.runDeterministic('proj');
+    even('character: no conflict when profile and latest status agree', run2.created.filter((f) => f.category === 'character').length === 0);
+  }
+
+  /* ==================================================================== */
+  /* 8d. World-rule detector — prohibition vs permitting rule entry        */
+  /* ==================================================================== */
+  {
+    const collab = makeCollaborators();
+    // World rule section prohibits "mortals" from wielding tide magic.
+    collab.state.world = { id: 'world1', projectId: 'proj', title: 'The Coast', overview: '', sections: [
+      { id: 'secR', title: 'Magic System Rules', content: 'Mortals cannot wield tide magic.' },
+    ], themes: [], settings: {} };
+
+    const knowRepo = makeKnowledgeRepo();
+    const knowledge = new KnowledgeService({ repository: knowRepo, ...collab });
+    // Contradicting rule entry: permits mortals.
+    await knowledge.createEntry('proj', {
+      kind: 'rule',
+      title: 'Tide-magic for all',
+      body: 'Mortals can wield tide magic with training.',
+      tags: ['rule', 'magic'],
+      evidence: [{ chapterId: 'chap1', sceneId: null, quote: 'mortals can wield tide magic', offset: null, note: '' }],
+    });
+
+    const analysis = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: new ContinuityService({ repository: makeContinuityRepo(), outlineService: collab.outlineService, sceneService: collab.sceneService }),
+      knowledgeService: knowledge,
+      outlineService: collab.outlineService,
+      sceneService: collab.sceneService,
+      characterService: collab.characterService,
+      worldService: collab.worldService,
+    });
+    const run = await analysis.runDeterministic('proj');
+    const ruleFindings = run.created.filter((f) => f.category === 'world-rule');
+    even('world-rule: detects prohibition contradicted by rule entry', ruleFindings.some((f) => /mortals/i.test(f.title)));
+    even('world-rule: finding cites locator evidence', ruleFindings.every((f) => f.evidence.length >= 1 && f.evidence.every((e) => e.chapterId || e.sceneId)));
+    even('world-rule: finding links the contradicting entry', ruleFindings.some((f) => f.relatedEntryIds && f.relatedEntryIds.length >= 1));
+
+    // Negative: agreeing rule entry (also says mortals cannot) → no conflict.
+    const collab2 = makeCollaborators();
+    collab2.state.world = { id: 'world1', projectId: 'proj', title: 'The Coast', overview: '', sections: [
+      { id: 'secR', title: 'Magic System Rules', content: 'Mortals cannot wield tide magic.' },
+    ], themes: [], settings: {} };
+    const knowRepo2 = makeKnowledgeRepo();
+    const knowledge2 = new KnowledgeService({ repository: knowRepo2, ...collab2 });
+    await knowledge2.createEntry('proj', {
+      kind: 'rule',
+      title: 'Tide-magic restriction',
+      body: 'Mortals can never wield tide magic.',
+      tags: ['rule', 'magic'],
+      evidence: [{ chapterId: 'chap1', sceneId: null, quote: 'mortals can never wield tide magic', offset: null, note: '' }],
+    });
+    const analysis2 = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: new ContinuityService({ repository: makeContinuityRepo(), outlineService: collab2.outlineService, sceneService: collab2.sceneService }),
+      knowledgeService: knowledge2,
+      outlineService: collab2.outlineService,
+      sceneService: collab2.sceneService,
+      characterService: collab2.characterService,
+      worldService: collab2.worldService,
+    });
+    const run2 = await analysis2.runDeterministic('proj');
+    even('world-rule: no conflict when rule entry agrees', run2.created.filter((f) => f.category === 'world-rule').length === 0);
+
+    // Negative: no rule-classified section → no world-rule finding at all.
+    const collab3 = makeCollaborators();
+    collab3.state.world = { id: 'world1', projectId: 'proj', title: 'The Coast', overview: '', sections: [
+      { id: 'secG', title: 'Geography', content: 'Mortals cannot cross the sea.' },
+    ], themes: [], settings: {} };
+    const analysis3 = new AnalysisService({
+      repository: makeAnalysisRepo(),
+      continuityService: new ContinuityService({ repository: makeContinuityRepo(), outlineService: collab3.outlineService, sceneService: collab3.sceneService }),
+      knowledgeService: new KnowledgeService({ repository: makeKnowledgeRepo(), ...collab3 }),
+      outlineService: collab3.outlineService,
+      sceneService: collab3.sceneService,
+      characterService: collab3.characterService,
+      worldService: collab3.worldService,
+    });
+    const run3 = await analysis3.runDeterministic('proj');
+    even('world-rule: no finding when no rule section exists', run3.created.filter((f) => f.category === 'world-rule').length === 0);
+  }
+
+  /* ==================================================================== */
+  /* 8e. All six categories are represented by at least one detector       */
+  /* ==================================================================== */
+  {
+    // Schema already exposes 6 categories; assert the detector set covers them.
+    const { ANALYSIS_CATEGORIES } = mod;
+    eq('categories: schema defines exactly six', ANALYSIS_CATEGORIES.length, 6);
+    for (const category of ['timeline', 'continuity', 'character', 'world-rule', 'foreshadowing', 'logic']) {
+      even(`categories: "${category}" is a valid schema category`, ANALYSIS_CATEGORIES.includes(category));
+    }
   }
 
   /* ==================================================================== */

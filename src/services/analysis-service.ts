@@ -7,9 +7,13 @@ import type {
   AnalysisOrigin,
   AnalysisSeverity,
   AnalysisStatus,
+  Chapter,
+  Character,
   ContinuityFact,
   Evidence,
   KnowledgeEntry,
+  Scene,
+  World,
 } from '@/types';
 import { compareFacts } from '@/schemas/continuity';
 import { AnalysisRepository } from '@/repositories/analysis-repository';
@@ -19,6 +23,8 @@ import { ContinuityService } from './continuity-service';
 import { KnowledgeService } from './knowledge-service';
 import { OutlineService } from './outline-service';
 import { SceneService } from './scene-service';
+import { CharacterService } from './character-service';
+import { WorldService } from './world-service';
 
 /** A candidate finding produced by a detector, before persistence. */
 export interface FindingDraft {
@@ -53,10 +59,32 @@ export interface UpdateFindingInput {
  *
  * ## Deterministic-first
  *
- * `runDeterministic` examines continuity facts + knowledge entries and emits
- * findings from a set of built-in detectors. Every emitted finding carries at
- * least one valid `Evidence` (chapter/scene locator). A candidate that cannot be
- * tied to a location is SKIPPED and counted — never persisted without evidence.
+ * `runDeterministic` examines continuity facts + knowledge entries + structured
+ * outline/scene/character/world data and emits findings from a set of built-in
+ * detectors. Every emitted finding carries at least one valid `Evidence`
+ * (chapter/scene locator). A candidate that cannot be tied to a location is
+ * SKIPPED and counted — never persisted without evidence.
+ *
+ * ## Detector coverage (all six ANALYSIS_CATEGORIES)
+ *
+ *   - `continuity`  — same-chapter contradiction (one subject+predicate, two
+ *                     values at the SAME anchor).
+ *   - `logic`       — action after a `status: deceased` fact.
+ *   - `foreshadowing` — unresolved foreshadowing entry.
+ *   - `timeline`    — contradictory ordering: two scenes in one chapter share
+ *                     the same `order` integer (ambiguous story position). Only
+ *                     emitted when scene `order` is actually inconsistent; no
+ *                     timestamps are invented.
+ *   - `character`   — a character record whose `status` contradicts the latest
+ *                     continuity `status` fact in story order, OR an `unused`
+ *                     character that is nonetheless present in a scene. Only
+ *                     structured status/scene-membership is compared — never
+ *                     subjective personality text.
+ *   - `world-rule`  — a hard prohibition stated in a rule-classified world
+ *                     section (e.g. "X cannot …") contradicted by a knowledge
+ *                     `rule` entry (or continuity fact) that permits the SAME
+ *                     term ("X can …"). Only emitted when a concrete prohibition
+ *                     term and a concrete contradicting source are both found.
  *
  * ## AI-assisted suggestions — NOT implemented in P7 (reserved)
  *
@@ -71,8 +99,8 @@ export interface UpdateFindingInput {
  *
  * ## Findings are data, never manuscript edits
  *
- * Persisting a finding never touches chapters/scenes. It records an issue + its
- * evidence for the user to act on.
+ * Persisting a finding never touches chapters/scenes/characters/world. It records
+ * an issue + its evidence for the user to act on.
  */
 export class AnalysisService {
   private readonly repository: AnalysisRepository;
@@ -80,6 +108,8 @@ export class AnalysisService {
   private readonly knowledgeService: KnowledgeService;
   private readonly outlineService: OutlineService;
   private readonly sceneService: SceneService;
+  private readonly characterService: CharacterService;
+  private readonly worldService: WorldService;
 
   constructor(deps: {
     repository?: AnalysisRepository;
@@ -87,12 +117,16 @@ export class AnalysisService {
     knowledgeService?: KnowledgeService;
     outlineService?: OutlineService;
     sceneService?: SceneService;
+    characterService?: CharacterService;
+    worldService?: WorldService;
   } = {}) {
     this.repository = deps.repository ?? new AnalysisRepository();
     this.continuityService = deps.continuityService ?? new ContinuityService();
     this.knowledgeService = deps.knowledgeService ?? new KnowledgeService();
     this.outlineService = deps.outlineService ?? new OutlineService();
     this.sceneService = deps.sceneService ?? new SceneService();
+    this.characterService = deps.characterService ?? new CharacterService();
+    this.worldService = deps.worldService ?? new WorldService();
   }
 
   /* ------------------------------- Reads --------------------------------- */
@@ -178,22 +212,21 @@ export class AnalysisService {
   /**
    * Runs the built-in detectors and persists any evidence-backed findings.
    *
-   * Detectors (all operate purely on stored data):
-   *   1. same-chapter contradiction — one subject+predicate asserted two
-   *      different values at the SAME anchor;
-   *   2. actions after death — a `status: deceased` fact precedes a later
-   *      `position`/`relationship`/`knowledge` fact for the same subject;
-   *   3. unresolved foreshadowing — a knowledge entry tagged `foreshadowing`
-   *      with no later `payoff` entry and no resolving finding.
+   * Detectors (all operate purely on stored data; see class docs for the full
+   * coverage table across all six categories). Each detector only emits when both
+   * a concrete contradiction AND a valid chapter/scene locator can be produced.
    *
    * The run is idempotent-ish: it does not delete previously reviewed findings;
    * it appends new open findings. Callers typically review and dismiss.
    */
   async runDeterministic(projectId: string): Promise<RunAnalysisResult> {
-    const [allFacts, entries, rankLookup] = await Promise.all([
+    const [allFacts, entries, rankLookup, chapters, characters, world] = await Promise.all([
       this.continuityService.listFacts(projectId),
       this.knowledgeService.listEntries(projectId),
       this.continuityService.buildLiveRankLookup(projectId),
+      this.outlineService.listProjectChapters(projectId),
+      this.characterService.listCharacters(projectId),
+      this.worldService.getWorld(projectId),
     ]);
 
     // Ignore facts whose anchor chapter no longer exists in the live outline:
@@ -203,6 +236,13 @@ export class AnalysisService {
     const facts = rankLookup.chapterRank.size === 0
       ? allFacts
       : allFacts.filter((fact) => rankLookup.chapterRank.has(fact.anchorChapterId));
+
+    // Scenes are needed by the timeline (scene-order collisions) and character
+    // (scene membership) detectors. Load once per chapter.
+    const scenesByChapter = new Map<string, Scene[]>();
+    for (const chapter of chapters) {
+      scenesByChapter.set(chapter.id, await this.sceneService.listScenes(chapter.id));
+    }
 
     const drafts: FindingDraft[] = [];
     let skippedNoEvidence = 0;
@@ -218,6 +258,9 @@ export class AnalysisService {
     this.detectSameChapterContradictions(facts, push);
     this.detectActionsAfterDeath(facts, rankLookup, push);
     this.detectUnresolvedForeshadowing(entries, push);
+    this.detectTimelineContradictions(chapters, scenesByChapter, push);
+    this.detectCharacterInconsistencies(characters, facts, rankLookup, chapters, scenesByChapter, push);
+    this.detectWorldRuleConflicts(world, entries, facts, push);
 
     const created: AnalysisFinding[] = [];
     for (const draft of drafts) {
@@ -340,6 +383,252 @@ export class AnalysisService {
     }
   }
 
+  /**
+   * Timeline detector — contradictory ordering derived ONLY from structured
+   * scene `order` fields.
+   *
+   * The data model has NO explicit in-world timestamps; chapter order and scene
+   * `order` are the only objective temporal structure available. A genuine,
+   * verifiable ordering fault surfaces when two scenes in the SAME chapter claim
+   * the same `order` integer: their relative story position is then ambiguous, so
+   * any event anchored to one of them has no well-defined place in time.
+   *
+   * We deliberately do NOT infer contradictions from continuity facts anchored to
+   * *different* chapters — a later chapter legitimately supersedes an earlier
+   * value, which is normal flow, not a bug. Emitting on that would be speculative.
+   * (This restriction is reported as a known limitation in the handoff doc.)
+   */
+  private detectTimelineContradictions(
+    chapters: Chapter[],
+    scenesByChapter: Map<string, Scene[]>,
+    push: (draft: FindingDraft) => void,
+  ): void {
+    for (const chapter of chapters) {
+      const scenes = scenesByChapter.get(chapter.id) ?? [];
+      if (scenes.length < 2) continue;
+
+      const byOrder = new Map<number, Scene[]>();
+      for (const scene of scenes) {
+        const list = byOrder.get(scene.order);
+        if (list) list.push(scene);
+        else byOrder.set(scene.order, [scene]);
+      }
+
+      for (const [order, group] of byOrder) {
+        if (group.length < 2) continue;
+        const evidence: Evidence[] = group.map((scene) => ({
+          chapterId: chapter.id,
+          sceneId: scene.id,
+          quote: scene.title,
+          offset: null,
+          note: `Scene order ${order}`,
+        }));
+        push({
+          category: 'timeline',
+          severity: 'warning',
+          origin: 'deterministic',
+          title: `Ambiguous scene order in "${chapter.title}"`,
+          description:
+            `${group.length} scenes in chapter "${chapter.title}" share the same order position (${order}): ` +
+            group.map((scene) => `"${scene.title}"`).join(', ') +
+            '. Their relative story position is ambiguous, so events anchored to them have no well-defined ' +
+            'place in time. Assign distinct scene orders to resolve the timeline.',
+          evidence,
+        });
+      }
+    }
+  }
+
+  /**
+   * Character behavior detector — contradictions supported ONLY by structured
+   * data (character `status` field + scene membership + continuity `status` facts).
+   *
+   * Two objective checks, each requiring concrete structured inputs:
+   *   1. A character record whose `status` is `deceased`/`missing`/`active`, but
+   *      whose latest continuity `status` fact — in live story order — asserts a
+   *      mutually-exclusive state (e.g. record `deceased` vs latest fact `alive`).
+   *      Only compared when such a status fact exists; we never guess.
+   *   2. A character record marked `unused` that nonetheless appears in a scene
+   *      (`characterIds`/`povCharacterId`) — "unused" contradicts being on-page.
+   *
+   * We deliberately do NOT judge personality/prose, which is subjective and not a
+   * deterministic fact.
+   */
+  private detectCharacterInconsistencies(
+    characters: Character[],
+    facts: ContinuityFact[],
+    rankLookup: { chapterRank: Map<string, number>; sceneRank: Map<string, number> },
+    chapters: Chapter[],
+    scenesByChapter: Map<string, Scene[]>,
+    push: (draft: FindingDraft) => void,
+  ): void {
+    if (characters.length === 0) return;
+
+    // Latest continuity `status` fact per character subject id, in live order.
+    const latestStatusBySubject = new Map<string, ContinuityFact>();
+    const statusFactsBySubject = new Map<string, ContinuityFact[]>();
+    for (const fact of facts) {
+      if (fact.predicate !== 'status' || !fact.subjectId) continue;
+      const list = statusFactsBySubject.get(fact.subjectId);
+      if (list) list.push(fact);
+      else statusFactsBySubject.set(fact.subjectId, [fact]);
+    }
+    for (const [subjectId, list] of statusFactsBySubject) {
+      const ordered = [...list].sort((a, b) => compareFacts(a, b, rankLookup));
+      const latest = ordered[ordered.length - 1];
+      if (latest) latestStatusBySubject.set(subjectId, latest);
+    }
+
+    // Map scene membership back to (chapterId, sceneId) for evidence.
+    const sceneLocation = new Map<string, { chapterId: string; sceneId: string }>();
+    for (const chapter of chapters) {
+      for (const scene of scenesByChapter.get(chapter.id) ?? []) {
+        sceneLocation.set(scene.id, { chapterId: chapter.id, sceneId: scene.id });
+      }
+    }
+
+    for (const character of characters) {
+      // Check 1 — record status vs latest continuity status fact.
+      const latest = latestStatusBySubject.get(character.id);
+      if (latest) {
+        const recordState = normalizeLifeState(character.status);
+        const factState = classifyStatusValue(latest.value);
+        if (recordState && factState && recordState !== factState) {
+          const evidence = collectEvidence([latest]);
+          if (evidence.length > 0) {
+            push({
+              category: 'character',
+              severity: 'warning',
+              origin: 'deterministic',
+              title: `"${character.name}"'s status conflicts with recorded events`,
+              description:
+                `Character "${character.name}" is recorded with status "${character.status}", but the latest ` +
+                `continuity status fact says "${latest.value}". Align the character profile with the story state ` +
+                'or record the transition that resolves the difference.',
+              evidence,
+              relatedFactIds: [latest.id],
+            });
+          }
+        }
+      }
+
+      // Check 2 — `unused` character appearing in a scene.
+      if (character.status === 'unused') {
+        let hit: { chapterId: string; sceneId: string } | null = null;
+        for (const chapter of chapters) {
+          for (const scene of scenesByChapter.get(chapter.id) ?? []) {
+            const present =
+              scene.povCharacterId === character.id || scene.characterIds.includes(character.id);
+            if (present) {
+              hit = sceneLocation.get(scene.id) ?? { chapterId: chapter.id, sceneId: scene.id };
+              break;
+            }
+          }
+          if (hit) break;
+        }
+        if (hit) {
+          push({
+            category: 'character',
+            severity: 'info',
+            origin: 'deterministic',
+            title: `"${character.name}" is marked unused but appears in a scene`,
+            description:
+              `Character "${character.name}" has status "unused" but is listed in a scene. Either update the ` +
+              'character\'s status to reflect that they appear, or remove them from the scene.',
+            evidence: [{ chapterId: hit.chapterId, sceneId: hit.sceneId, quote: character.name, offset: null, note: 'Scene membership' }],
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * World-rule detector — compares a CONCRETE prohibition stated in a
+   * rule-classified world section against a CONCRETE contradicting source
+   * (a knowledge `rule` entry or a continuity fact) that permits the same term.
+   *
+   * A rule section is a world section whose title classifies as a rule (see the
+   * same heuristic the Knowledge Base importer uses). From its content we extract
+   * prohibitions of the form "<term> cannot/never/must not/may not <verb>", yielding
+   * a normalized term. For each such prohibition we look for evidence that the
+   * SAME term is possible — an affirmative "can/always/allow/allows/may <term>"
+   * pattern in a `rule`-kind knowledge entry, or a continuity `attribute`/
+   * `possession`/`knowledge` fact whose value names the term.
+   *
+   * A finding is emitted ONLY when both a prohibition term AND a contradicting
+   * source are concretely identified. Free-form world prose that states no
+   * recognizable prohibition produces no finding — we never invent rules.
+   */
+  private detectWorldRuleConflicts(
+    world: World | null,
+    entries: KnowledgeEntry[],
+    facts: ContinuityFact[],
+    push: (draft: FindingDraft) => void,
+  ): void {
+    if (!world) return;
+
+    const ruleSections = world.sections.filter((section) => classifyWorldSectionIsRule(section.title));
+    if (ruleSections.length === 0) return;
+
+    // Collect prohibitions: { term, sentence } from each rule section.
+    const prohibitions: { term: string; sentence: string }[] = [];
+    for (const section of ruleSections) {
+      for (const sentence of splitSentences(section.content)) {
+        const term = extractProhibitedTerm(sentence);
+        if (term) prohibitions.push({ term, sentence });
+      }
+    }
+    if (prohibitions.length === 0) return;
+
+    // Knowledge entries that are rules (kind === 'rule' or rule-tagged).
+    const ruleEntries = entries.filter(
+      (entry) => entry.kind === 'rule' || entry.tags.some((tag) => /rule|law|magic|system/i.test(tag)),
+    );
+
+    for (const { term, sentence } of prohibitions) {
+      // Contradiction from a rule knowledge entry that permits the term.
+      const contradictingEntry = ruleEntries.find((entry) => entryAllowsTerm(entry, term));
+      if (contradictingEntry) {
+        const evidence = contradictingEntry.evidence.filter((ev) => ev.chapterId || ev.sceneId);
+        if (evidence.length === 0) continue; // no locator → cannot cite → skip
+        push({
+          category: 'world-rule',
+          severity: 'error',
+          origin: 'deterministic',
+          title: `World rule conflict on "${term}"`,
+          description:
+            `The world rule states "${sentence.trim()}", but a rule entry "${contradictingEntry.title}" permits ` +
+            `"${term}". These two structured rule sources conflict; reconcile them.`,
+          evidence,
+          relatedEntryIds: [contradictingEntry.id],
+        });
+        continue;
+      }
+
+      // Contradiction from a continuity fact whose value names the term.
+      const contradictingFact = facts.find(
+        (fact) =>
+          ['attribute', 'possession', 'knowledge'].includes(fact.predicate) &&
+          termAppears(fact.value, term),
+      );
+      if (contradictingFact) {
+        const evidence = collectEvidence([contradictingFact]);
+        if (evidence.length === 0) continue;
+        push({
+          category: 'world-rule',
+          severity: 'error',
+          origin: 'deterministic',
+          title: `World rule conflict on "${term}"`,
+          description:
+            `The world rule states "${sentence.trim()}", but a recorded ${contradictingFact.predicate} fact ` +
+            `("${contradictingFact.value}") concerns the same term "${term}". Verify whether this violates the rule.`,
+          evidence,
+          relatedFactIds: [contradictingFact.id],
+        });
+      }
+    }
+  }
+
   /* ------------------------------- helpers ------------------------------- */
 
   /**
@@ -451,3 +740,88 @@ function collectEvidence(facts: ContinuityFact[]): Evidence[] {
 function subjectLabel(fact: ContinuityFact): string {
   return fact.subjectLabel || fact.subjectId || 'a subject';
 }
+
+/* -------------------------------------------------------------------------- */
+/* Character-status & world-rule helpers                                      */
+/* -------------------------------------------------------------------------- */
+
+/** Collapses a character-record status to a coarse life-state, when meaningful. */
+function normalizeLifeState(status: string): 'alive' | 'dead' | 'missing' | null {
+  switch (status) {
+    case 'active':
+      return 'alive';
+    case 'deceased':
+      return 'dead';
+    case 'missing':
+      return 'missing';
+    default:
+      return null; // e.g. 'unused' has no life-state to compare
+  }
+}
+
+/** Classifies a free-text continuity status value into a coarse life-state. */
+function classifyStatusValue(value: string): 'alive' | 'dead' | 'missing' | null {
+  const v = value.toLowerCase();
+  if (/\b(dead|deceased|killed|died|slain)\b/.test(v)) return 'dead';
+  if (/\b(missing|lost|vanished|disappeared)\b/.test(v)) return 'missing';
+  if (/\b(alive|living|active|awake|healthy|fine|well)\b/.test(v)) return 'alive';
+  return null;
+}
+
+/** Splits free-form prose into sentence-ish segments for prohibition scanning. */
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[.!?;])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const PROHIBITION_RE = /\b([a-z][a-z'-]{2,})\b[^.!?;]{0,40}?\b(cannot|can't|can not|never|must not|may not|forbidden|prohibited)\b/i;
+/** "can/may <term>" but NOT "can never/not <term>" — a negated modal is not permission. */
+const PERMISSION_RE = /\b(can|may|allowed|allows|permitted|always|possible|grants?)\b(?!\s+(?:never|not|n't)\b)[^.!?;]{0,40}?\b([a-z][a-z'-]{2,})\b/i;
+const NEGATED_MODAL_RE = /\b(cannot|can't|can not|never|must not|may not|forbidden|prohibited)\b/i;
+
+/**
+ * Extracts the prohibited term from a sentence like "Mortals cannot wield tide
+ * magic" → "mortals". Returns null when no prohibition pattern is present.
+ * The term is the subject word immediately before the modal, lower-cased.
+ */
+function extractProhibitedTerm(sentence: string): string | null {
+  const m = PROHIBITION_RE.exec(sentence);
+  if (!m) return null;
+  const term = m[1].toLowerCase();
+  if (STOPWORDS.has(term)) return null;
+  return term;
+}
+
+/** True when a rule knowledge entry affirmatively permits `term`. */
+function entryAllowsTerm(entry: KnowledgeEntry, term: string): boolean {
+  const hay = entry.searchText || `${entry.title} ${entry.summary} ${entry.body}`.toLowerCase();
+  for (const sentence of splitSentences(hay)) {
+    // A sentence that itself states a prohibition never counts as permission
+    // (e.g. "Mortals can never wield tide magic" must not read as allowing it).
+    if (NEGATED_MODAL_RE.test(sentence)) continue;
+    const m = PERMISSION_RE.exec(sentence);
+    if (m) {
+      const allowed = (m[2] ?? '').toLowerCase();
+      if (allowed === term || sentence.includes(term)) return true;
+    }
+  }
+  return false;
+}
+
+/** True when `term` appears as a whole word inside `value`. */
+function termAppears(value: string, term: string): boolean {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(value);
+}
+
+/** Rule heuristic mirroring the Knowledge Base importer's section classifier. */
+function classifyWorldSectionIsRule(title: string): boolean {
+  return /\b(rule|law|magic|system|tech|power|constraint|limitation)\b/i.test(title);
+}
+
+const STOPWORDS = new Set([
+  'the', 'and', 'but', 'for', 'nor', 'not', 'you', 'they', 'them', 'this', 'that',
+  'with', 'from', 'into', 'over', 'under', 'only', 'some', 'any', 'all', 'one',
+]);

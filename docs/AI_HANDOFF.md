@@ -632,10 +632,12 @@ P6 在 R1–R10 上均满足；本次修复了 R6（同名异内容不再静默�
 - **Continuity Manager**（`/ai/continuity-manager`）：事件溯源式「连续性事实」日志（谁在哪 /
   持有何物 / 知晓何事 / 关系 / 状态 / 属性），锚定到章节（可选场景）。展示「当前状态」与
   「某章节时点状态」两种**确定性重建**。重建始终按**实时大纲顺序**计算，章节重排后自动正确。
-- **Plot Hole Detector**（`/ai/plot-hole-detector`）：确定性检测器（同一章节内同主体同谓词的
-  矛盾、死亡后仍有动作、未回收的伏笔）。**用户点击才运行**，无后台扫描；每条发现**至少携带
-  一条带定位的 evidence**（章节或场景），schema 与 Service 双向拒绝无证据发现。发现是审查
-  数据：确认 / 驳回 / 解决 / 删除，绝不修改正文。
+- **Plot Hole Detector**（`/ai/plot-hole-detector`）：六类确定性检测器——同一章节内同主体同谓词
+  的矛盾（continuity）、死亡后仍有动作（logic）、未回收的伏笔（foreshadowing）、同章节场景
+  `order` 冲突导致的时间线歧义（timeline）、角色记录状态与连续性状态事实/场景成员冲突
+  （character）、规则类世界分区的硬性禁止与许可条目/事实冲突（world-rule）。**用户点击才运行**，
+  无后台扫描；每条发现**至少携带一条带定位的 evidence**（章节或场景），schema 与 Service 双向
+  拒绝无证据发现。发现是审查数据：确认 / 驳回 / 解决 / 删除，绝不修改正文、角色或世界观。
 
 ### 15.2 架构不变量
 
@@ -690,7 +692,9 @@ P6 在 R1–R10 上均满足；本次修复了 R6（同名异内容不再静默�
 - `src/services/continuity-service.ts`（事实 CRUD、`currentState`、`stateAsOf`、anchor 校验、
   孤儿锚点过滤 `withoutOrphanedAnchors`）。
 - `src/services/analysis-service.ts`（`runDeterministic`、`saveDraft`、`updateFinding`、
-  `deleteFinding`、`listFindings`；evidence 项目内定位校验）。
+  `deleteFinding`、`listFindings`；evidence 项目内定位校验；六类确定性检测器：same-chapter 矛盾、
+  死后动作、未回收伏笔、场景 order 时间线冲突、角色状态/unused 冲突、世界规则禁止冲突；
+  构造新增 `characterService`/`worldService` 两个可选依赖，默认真实服务）。
 - `src/services/index.ts`（单例与导出）。
 
 **Hooks**
@@ -712,10 +716,14 @@ P6 在 R1–R10 上均满足；本次修复了 R6（同名异内容不再静默�
 | 测试 | 命令 | 结果 |
 | --- | --- | --- |
 | 类型检查 | `npx tsc -b --noEmit` | ✅ exit 0 |
-| P7 逻辑（Node + Vite 打包，注入假仓储） | `npm run verify:knowledge` | ✅ **66 / 66** |
+| P7 逻辑（Node + Vite 打包，注入假仓储） | `npm run verify:knowledge` | ✅ **86 / 86** |
 | P7 浏览器/UI（真浏览器 + IndexedDB） | `npm run verify:knowledge:ui` | ✅ **16 / 16** |
 | P6 逻辑回归 | `npm run verify:prompt` | ✅ **82 / 82**（无回归） |
 | 生产构建 | `npm run build` | ✅ exit 0（三个 P7 页面独立分包） |
+| P6 UI 回归 | `npm run verify:prompt:ui` | ✅ 27 / 27（无回归） |
+| P5 逻辑回归 | `npm run verify:ai` | ✅ 71 / 71（无回归） |
+| P5 UI 回归 | `npm run verify:ai:ui` | ✅ 26 / 26（无回归） |
+| P1–P4 UI 回归 | `p2a/p2b/p3/p4-verify.cjs` | ✅ 23 / 21 / 28 / 13 全绿 |
 
 `verify:knowledge` 覆盖：evidence 定位必填（空/负 offset 拒绝）、finding 无证据被 schema 拒绝、
 `deriveSearchText`/`buildSourceKey` 确定性、`compareFacts` 稳定排序与 tie-break、
@@ -724,6 +732,8 @@ AND/空查询、Continuity anchor 校验/当前状态/as-of/**重排后重建随
 Analysis 检测器仅产证据发现 + `saveDraft` 拒绝无证据 + 审查生命周期、级联隔离。
 本次审计新增断言：**删除锚点章节后重建不再被孤儿事实污染**、**saveDraft 拒绝跨项目/跨章节
 evidence 引用**、**重新索引时清理已删除来源的陈旧条目**。
+完成批次新增断言（§15.11）：三类新检测器各自的正例与负例——场景 order 冲突判定、角色状态冲突
+与 unused-在场景判定、世界规则禁止 vs 许可条目/事实冲突，以及六类类别枚举校验。
 
 `verify:knowledge:ui` 覆盖（真库）：三条路由渲染真实页面（非占位）、首导入创建 + 重导入幂等
 （0 新增/全部刷新/总数不变）+ 来源可追溯 + 搜索命中/未命中、连续性当前状态 / as-of、**真实
@@ -732,8 +742,10 @@ evidence 引用**、**重新索引时清理已删除来源的陈旧条目**。
 
 ### 15.7 已知限制与风险
 
-1. **检测器为确定性启发式**，覆盖三类高频问题；更复杂的跨章节因果/世界规则校验留待扩展，且
-   均须遵循「证据必达」不变式。
+1. **检测器为确定性启发式**，现已覆盖全部六类（`timeline`/`continuity`/`character`/
+   `world-rule`/`foreshadowing`/`logic`），但每类只在**结构化数据足以判定**时才发结论
+   （详见 §15.11 的检测语义与逐类限制）。任何更复杂的跨章节因果推断若超出结构化数据，
+   我们**报告限制而非臆造规则**，并始终遵循「证据必达」不变式。
 2. **知识搜索为客户端 AND 子串匹配**（非向量/模糊）；来源索引不包含全部实体（如角色关系图细节），
    以现有实体粒度为准。
 3. **连续性 `anchorRank` 依赖大纲查询**：若在服务外用非大纲路径改动章节顺序，需重新刷新状态；
@@ -801,7 +813,7 @@ evidence 引用**、**重新索引时清理已删除来源的陈旧条目**。
 | 每个发现至少一条证据（schema 拒绝） | ✅ | `evidence.min(1)` + `saveDraft` 双保险 |
 | 证据含定位（章节/场景）与摘要/引用 | ✅ | `EvidenceSchema`（chapterId/sceneId + quote/offset/note） |
 | 发现引用项目内章节/场景 | ✅（本次修复） | §15.8-2 |
-| 发现使用有意义的类别与严重度 | ✅ | 6 类别 × 3 严重度；三类检测器覆盖 |
+| 发现使用有意义的类别与严重度 | ✅ | 6 类别 × 3 严重度；六类检测器全覆盖（见 §15.11） |
 | 高置信发现标记来源 | ✅ | `origin: deterministic|ai|manual`（本阶段确定性） |
 | 发现可审查且不与正文冲突 | ✅ | open/confirmed/dismissed/resolved + 只读分析 |
 | 各功能类别存在 AI 辅助 | ❌（时间线/连续性/分析 AI 均未实现，见 §15.7-4） | 确定性检测器为主；AI 路径保留未启用（符合任务「不得重设计」约束） |
@@ -812,8 +824,52 @@ evidence 引用**、**重新索引时清理已删除来源的陈旧条目**。
 
 ### 15.10 结论
 
-P7 三个模块均按「幂等 / 证据必达 / 事件溯源 / 只读分析 / 分层不变」实现；本次审计修复了
-「删除锚点污染重建」「evidence 项目内定位校验」「重新索引清理陈旧条目」三处完整性缺口。
-逻辑 **66/66**、真库 UI 16/16、P6 回归 82/82、P1–P4 回归全绿、类型检查与生产构建全部通过。
-**建议判定：PASS（含 §15.7 所列、不阻塞范围的已知限制，以及 §15.9 中如实标注的 AI 辅助分析尚未实现项）。**
+P7 三个模块均按「幂等 / 证据必达 / 事件溯源 / 只读分析 / 分层不变」实现；审计修复了
+「删除锚点污染重建」「evidence 项目内定位校验」「重新索引清理陈旧条目」三处完整性缺口，
+并在完成批次中补齐了缺失的**三类确定性检测器**（时间线 / 角色 / 世界规则），使六类覆盖完整。
+逻辑 **86/86**、真库 UI 16/16、P6 逻辑 82/82 与 UI 27/27、P5 逻辑 71/71 与 UI 26/26、
+P1–P4 回归全绿、类型检查与生产构建全部通过。
+**建议判定：PASS（含 §15.7 / §15.11 所列、不阻塞范围的已知限制；AI 辅助分析仍按任务要求显式留白）。**
+
+### 15.11 完成批次：补齐三类确定性检测器（timeline / character / world-rule）
+
+本批次在**不重设计**既有系统、**不新增数据/不臆造规则**的前提下，于既有架构内补齐审计指出的
+三类缺失检测器。所有检测器仍经 `AnalysisService.runDeterministic` → `saveDraft` 管线落库，
+沿用 `evidence.min(1)` schema 校验、`assertEvidenceInProject` 项目内定位校验、`open/confirmed/
+dismissed/resolved` 审查生命周期，且**从不改动**章节/场景/角色/世界观数据。AI 辅助分析
+**仍显式留白**（不在本批次范围）。
+
+**改动文件**：`src/services/analysis-service.ts`（新增 3 个检测器 + `characterService`/
+`worldService` 两个可选构造依赖 + 纯函数助手）、`scripts/p7-verify.cjs`（新增 20 项聚焦逻辑测试，
+含正/负例）、`docs/AI_HANDOFF.md`（本节）。
+
+**检测语义（每类仅用结构化数据，证据必达）**
+
+| 类别 | 判定规则（客观、可验证） | 正例 / 负例 | 已知限制（如实报告，不臆造） |
+| --- | --- | --- | --- |
+| `timeline` | 同一章节内**两个场景共享相同 `order` 整数** → 相对时序歧义，锚定其上的事件无确定时间位。仅用场景 `order`，不发明时间戳。 | 正：chap 两场景 order 均为 0；负：order 0/1 各异。 | 数据模型**无显式世界内时间戳**；不同章节的值变更属正常推进，不被判为矛盾。 |
+| `character` | (1) 角色记录 `status` 与「实时故事序下最新连续性 `status` 事实」互斥（如记录 `deceased` vs 事实 `alive`）；(2) 记录 `unused` 却出现在某场景 `characterIds`/`povCharacterId`。仅比结构化状态/场景成员，**不评判主观性格文本**。 | 正：profile active + 事实 dead；负：profile active + 最新事实 alive。 | 无状态事实时不做猜测；`missing`/`alive` 的粗粒度映射有限。 |
+| `world-rule` | 规则类世界分区（标题含 rule/law/magic/system/tech/power…）中提取 `<术语> cannot/never/must not/may not …` 的**硬性禁止**；与同类 `rule` 知识条目（否定模态不计为许可）或连续性 `attribute/possession/knowledge` 事实中存在**同术语且相矛盾**者比对。两侧「具体禁止」与「冲突来源」都成立才发。 | 正：规则「Mortals cannot…」vs 条目「Mortals can…」；负：条目亦为「can never…」/无规则分区。 | 自由散文式规则若无可识别禁止句式则**不发**；仅识别英文模态句式，非 NLP 语义理解。 |
+
+**证据与安全保证（不变式保持）**
+- 每条发现至少一条带章节/场景定位的 evidence；无定位的候选计入 `skippedNoEvidence`，绝不落库。
+- `saveDraft` 继续执行 `assertEvidenceInProject`：`timeline` 证据为同章两场景；`character`
+  第一类引用连续性状态事实（回退锚点章节），第二类引用场景成员章节/场景；`world-rule`
+  引用冲突条目的定位证据或冲突事实的锚点。
+- `runDeterministic` 先过滤锚点已删的事实；因定位失效而无法安全落库的草稿计入 skipped，不中断整轮。
+- 发现只存为数据，**永不自动修改**任何项目数据；审查生命周期不变；来源经 `origin: deterministic` 标注。
+
+**实测结果（本批次，dev server :5177 + 真浏览器/IndexedDB）**
+- `verify:knowledge`（逻辑）：**86 / 86**（原 66 + 新增 20，未削弱任何既有断言）
+- `verify:knowledge:ui`（真库）：**16 / 16**
+- P6 逻辑 `verify:prompt`：**82 / 82**；P6 UI `verify:prompt:ui`：**27 / 27**
+- P5 逻辑 `verify:ai`：**71 / 71**；P5 UI `verify:ai:ui`：**26 / 26**
+- P1–P4 回归（UI）：P2a 23/23、P2b 21/21、P3 28/28、P4 13/13
+- 类型检查 `tsc -b --noEmit`：exit 0；生产构建 `npm run build`：exit 0
+
+**残留限制（不阻塞，如实标注）**
+- `timeline` 覆盖范围受限于「场景 order 冲突」这一客观时序缺陷；真正的跨章节世界内时序矛盾
+  因无结构化时间戳**无法可靠检测**，故不实现、不臆造。
+- `world-rule` 依赖英文模态句式与规则类分区/条目；自由散文规则可能漏检（保守优先，宁缺毋滥）。
+- AI 辅助分析仍**未实现**（`origin:'ai'` 仅保留），按任务要求显式排除于本批次之外。
 
