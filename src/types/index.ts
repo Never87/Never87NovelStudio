@@ -52,3 +52,34 @@ export type {
   AiConfigValidation,
 } from './ai';
 
+/* ------------------------------ P6 — Prompt & Context ---------------------- */
+export type {
+  PromptTemplate,
+  PromptTemplateVersion,
+  PromptVariable,
+  PromptBundle,
+  PromptBundleEntry,
+  PromptCategoryPreset,
+} from '@/schemas/prompt';
+export {
+  PROMPT_CATEGORY_PRESETS,
+  PROMPT_BUNDLE_FORMAT,
+  PROMPT_BUNDLE_VERSION,
+  VARIABLE_NAME_PATTERN,
+} from '@/schemas/prompt';
+export type {
+  ContextLayer,
+  ContextSourceType,
+  ContextPriority,
+  ContextItem,
+  ContextConfig,
+} from '@/schemas/context';
+export {
+  CONTEXT_LAYERS,
+  CONTEXT_SOURCE_TYPES,
+  CONTEXT_PRIORITIES,
+  MIN_CONTEXT_BUDGET_TOKENS,
+  MAX_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_REQUESTED_OUTPUT_TOKENS,
+} from '@/schemas/context';
+

@@ -205,6 +205,9 @@ export function ModelConfigurationPanel() {
                           <p className="text-subtle mt-0.5 font-mono text-2xs">{model.modelId}</p>
                           <p className="text-subtle text-2xs">
                             temp {model.temperature} · {model.maxTokens} tokens · {(model.timeout / 1000).toFixed(0)}s timeout
+                            {model.contextWindowTokens != null
+                              ? ` · ${model.contextWindowTokens.toLocaleString()} ctx window`
+                              : ' · ctx window unknown'}
                           </p>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -263,6 +266,7 @@ export function ModelConfigurationPanel() {
               displayName: values.displayName,
               temperature: values.temperature,
               maxTokens: values.maxTokens,
+              contextWindowTokens: values.contextWindowTokens,
               timeout,
               isDefault: values.isDefault,
               enabled: values.enabled,
@@ -274,6 +278,7 @@ export function ModelConfigurationPanel() {
               displayName: values.displayName,
               temperature: values.temperature,
               maxTokens: values.maxTokens,
+              contextWindowTokens: values.contextWindowTokens,
               timeout,
               isDefault: values.isDefault,
               enabled: values.enabled,

@@ -24,6 +24,11 @@ export const ID_PREFIX = {
   aiProvider: 'prov',
   aiModel: 'model',
   aiTaskConfig: 'aifcfg',
+  // P6 — Prompt Engineering Center & Context Manager.
+  promptTemplate: 'ptpl',
+  promptTemplateVersion: 'ptv',
+  contextItem: 'ctx',
+  contextConfig: 'ctxcfg',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -110,5 +115,25 @@ export function createAiModelId(): string {
 /** Convenience wrapper for per-task AI model assignment ids. */
 export function createAiTaskConfigId(): string {
   return createId(ID_PREFIX.aiTaskConfig);
+}
+
+/** Convenience wrapper for prompt-template ids. */
+export function createPromptTemplateId(): string {
+  return createId(ID_PREFIX.promptTemplate);
+}
+
+/** Convenience wrapper for prompt-template version ids. */
+export function createPromptTemplateVersionId(): string {
+  return createId(ID_PREFIX.promptTemplateVersion);
+}
+
+/** Convenience wrapper for persisted context-item ids. */
+export function createContextItemId(): string {
+  return createId(ID_PREFIX.contextItem);
+}
+
+/** Convenience wrapper for per-project context-config ids. */
+export function createContextConfigId(): string {
+  return createId(ID_PREFIX.contextConfig);
 }
 

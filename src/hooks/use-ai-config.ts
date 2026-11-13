@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiModel, AiProvider, AiTaskKind } from '@/types';
 import type { CreateModelInput, CreateProviderInput, UpdateModelInput, UpdateProviderInput } from '@/services';
-import { aiConfigService } from '@/services';
+import { aiConfigService, promptTemplateService } from '@/services';
 
 /** Explicit load state, so "nothing configured" is never confused with a failure. */
 export type AiConfigStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
@@ -110,7 +110,19 @@ export function useAiConfig(): UseAiConfigResult {
       (id: string, enabled: boolean) => mutate(() => aiConfigService.setProviderEnabled(id, enabled)).then(() => undefined),
       [mutate],
     ),
-    deleteProvider: useCallback((id: string) => mutate(() => aiConfigService.deleteProvider(id)), [mutate]),
+    deleteProvider: useCallback(
+      (id: string) =>
+        mutate(async () => {
+          // Capture the provider's model ids BEFORE deletion so we can also clear
+          // any prompt-template model preferences that pointed at them (R7).
+          const affectedModelIds = (await aiConfigService.listModelsByProvider(id)).map((model) => model.id);
+          await aiConfigService.deleteProvider(id);
+          // Clear dangling template preferences (provider + its models). Best-effort:
+          // a cleanup failure must not undo a completed provider deletion.
+          await promptTemplateService.clearPreferencesForProvider(id, affectedModelIds).catch(() => undefined);
+        }),
+      [mutate],
+    ),
     createModel: useCallback((input: CreateModelInput) => mutate(() => aiConfigService.createModel(input)), [mutate]),
     updateModel: useCallback((id: string, input: UpdateModelInput) => mutate(() => aiConfigService.updateModel(id, input)), [mutate]),
     setModelEnabled: useCallback(
@@ -122,7 +134,16 @@ export function useAiConfig(): UseAiConfigResult {
         mutate(() => aiConfigService.setProviderDefaultModel(providerId, modelId)),
       [mutate],
     ),
-    deleteModel: useCallback((id: string) => mutate(() => aiConfigService.deleteModel(id)), [mutate]),
+    deleteModel: useCallback(
+      (id: string) =>
+        mutate(async () => {
+          await aiConfigService.deleteModel(id);
+          // Clear dangling template model preferences pointing at the deleted
+          // model (R7). Best-effort so a cleanup failure never blocks the delete.
+          await promptTemplateService.clearPreferencesForModel(id).catch(() => undefined);
+        }),
+      [mutate],
+    ),
     setGlobalDefaultModel: useCallback(
       (modelId: string | null) => mutate(() => aiConfigService.setGlobalDefaultModel(modelId)).then(() => undefined),
       [mutate],

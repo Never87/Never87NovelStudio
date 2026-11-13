@@ -9,6 +9,9 @@ import { ManuscriptTransferService } from './manuscript-transfer-service';
 import { AiService } from './ai-service';
 import { AiConfigService } from './ai-config-service';
 import { AiAssistanceService } from './ai-assistance-service';
+import { PromptTemplateService } from './prompt-template-service';
+import { ContextManagerService } from './context-manager-service';
+import { ContextAssemblyService } from './context-assembly-service';
 
 /**
  * Module-level application Services.
@@ -39,6 +42,18 @@ export const manuscriptTransferService = new ManuscriptTransferService();
 export const aiService = new AiService();
 export const aiConfigService = new AiConfigService();
 export const aiAssistanceService = new AiAssistanceService(aiService);
+
+/**
+ * Prompt Engineering Center & Context Manager services (P6).
+ *
+ * `promptTemplateService` owns editable templates + versioning;
+ * `contextManager` owns the per-project context config/items; and
+ * `contextAssemblyService` is the SINGLE logical request builder shared by the
+ * preview and the execution path. `aiAssistanceService` runs assembled requests.
+ */
+export const promptTemplateService = new PromptTemplateService();
+export const contextManagerService = new ContextManagerService();
+export const contextAssemblyService = new ContextAssemblyService({ aiService });
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -119,3 +134,30 @@ export type { TaskPromptDefinition, TaskPromptInput } from './ai/task-prompts';
 export { diffWords, isIdentical } from './ai/text-diff';
 export type { DiffToken, DiffOp } from './ai/text-diff';
 export { redactSecrets, maskApiKey, redactKnownPatterns, redactForError } from './ai/redaction';
+
+/* -------------------------- Prompt & Context (P6) ------------------------ */
+
+export { PromptTemplateService, PromptTemplateError } from './prompt-template-service';
+export type {
+  CreateTemplateInput,
+  UpdateTemplateInput,
+  PromptImportResult,
+} from './prompt-template-service';
+export { ContextManagerService, ContextManagerError, isReferenceSource } from './context-manager-service';
+export type {
+  CreateContextItemInput,
+  UpdateContextItemInput,
+  UpdateContextConfigInput,
+} from './context-manager-service';
+export { ContextAssemblyService, ContextAssemblyError } from './context-assembly-service';
+export type {
+  AssembledRequest,
+  AssembledSection,
+  ContextNotice,
+  AssemblyInput,
+} from './context-assembly-service';
+export { renderTemplate, parsePlaceholders, validateTemplate, referencedVariableNames, normalizeValues, PromptRenderError } from './ai/prompt-render';
+export type { ParsedPlaceholder, RenderResult, TemplateValidationIssue } from './ai/prompt-render';
+export { estimateTokens, estimateMessagesTokens } from './ai/token-estimator';
+export { BUILTIN_TEMPLATES } from './ai/builtin-templates';
+export type { BuiltinTemplate } from './ai/builtin-templates';

@@ -15,6 +15,8 @@ import { NarrativeRepository } from '@/repositories/narrative-repository';
 import { OutlineRepository } from '@/repositories/outline-repository';
 import { SceneRepository } from '@/repositories/scene-repository';
 import { ManuscriptRepository } from '@/repositories/manuscript-repository';
+import { PromptRepository } from '@/repositories/prompt-repository';
+import { ContextRepository } from '@/repositories/context-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -85,6 +87,8 @@ export class ProjectService {
   private readonly outlineRepository: OutlineRepository;
   private readonly sceneRepository: SceneRepository;
   private readonly manuscriptRepository: ManuscriptRepository;
+  private readonly promptRepository: PromptRepository;
+  private readonly contextRepository: ContextRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -94,6 +98,8 @@ export class ProjectService {
     outlineRepository: OutlineRepository = new OutlineRepository(),
     sceneRepository: SceneRepository = new SceneRepository(),
     manuscriptRepository: ManuscriptRepository = new ManuscriptRepository(),
+    promptRepository: PromptRepository = new PromptRepository(),
+    contextRepository: ContextRepository = new ContextRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -102,6 +108,8 @@ export class ProjectService {
     this.outlineRepository = outlineRepository;
     this.sceneRepository = sceneRepository;
     this.manuscriptRepository = manuscriptRepository;
+    this.promptRepository = promptRepository;
+    this.contextRepository = contextRepository;
   }
 
   /**
@@ -243,6 +251,10 @@ export class ProjectService {
       await this.sceneRepository.deleteByProjectId(id);
       await this.outlineRepository.deleteChaptersByProjectId(id);
       await this.outlineRepository.deleteVolumesByProjectId(id);
+      // P6: prompt templates (+ their version history) and context data are
+      // project-owned and must not survive their project.
+      await this.promptRepository.deleteAllByProject(id);
+      await this.contextRepository.deleteAllByProject(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

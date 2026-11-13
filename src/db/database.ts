@@ -7,9 +7,13 @@ import type {
   Chapter,
   ChapterDraft,
   Character,
+  ContextConfig,
+  ContextItem,
   DraftVersion,
   NarrativePlan,
   NovelProject,
+  PromptTemplate,
+  PromptTemplateVersion,
   Scene,
   SceneDraft,
   Volume,
@@ -55,6 +59,14 @@ export class NovelStudioDb extends Dexie {
   aiTaskConfigs!: Table<AiTaskConfig, string>;
   /** Singleton row holding the global default model (P5). */
   aiGlobalConfig!: Table<AiGlobalConfig, string>;
+  /** Prompt templates — current snapshot, per project (P6). */
+  promptTemplates!: Table<PromptTemplate, string>;
+  /** Immutable prompt-template version snapshots — append-only (P6, R1). */
+  promptTemplateVersions!: Table<PromptTemplateVersion, string>;
+  /** Persisted, user-controlled context items (references + notes) per project (P6). */
+  contextItems!: Table<ContextItem, string>;
+  /** Per-project context configuration — one row per project (P6). */
+  contextConfigs!: Table<ContextConfig, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -174,6 +186,45 @@ export class NovelStudioDb extends Dexie {
       aiModels: '&id, providerId, [providerId+modelId], enabled',
       aiTaskConfigs: '&task',
       aiGlobalConfig: '&id',
+    });
+
+    // v7 — Prompt Engineering Center & AI Context Manager (P6).
+    //   promptTemplates:         &id, projectId, category, taskKind, updatedAt
+    //                            -> projectId lists a project's templates; category
+    //                               and taskKind back filtering and default lookup.
+    //   promptTemplateVersions:  &id, templateId, projectId, [templateId+version], createdAt
+    //                            -> append-only history; the compound index orders
+    //                               a template's versions without a sort.
+    //   contextItems:            &id, projectId, layer, updatedAt
+    //                            -> projectId isolates context; layer groups by
+    //                               the four-layer architecture.
+    //   contextConfigs:          &id, &projectId, updatedAt
+    //                            -> the UNIQUE projectId index enforces ONE config
+    //                               per project, mirroring world/plan.
+    //
+    // Purely ADDITIVE: every v1-v6 store is restated verbatim so ALL existing
+    // data (projects, planning, manuscripts, AI config) survives untouched.
+    // The new AiModel.contextWindowTokens field is optional and needs no index,
+    // so no data mutation is required by this migration.
+    this.version(7).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
     });
   }
 }

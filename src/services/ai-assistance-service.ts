@@ -72,6 +72,14 @@ export interface RunAssistanceInput {
    * the caller at generation time and carried onto the proposal unchanged.
    */
   insertAnchor?: InsertAnchor;
+  /**
+   * P6: a pre-built message list from the Prompt Engineering Center / Context
+   * Manager pipeline (`ContextAssemblyService.buildRequest`). When provided it
+   * REPLACES the P5 built-in prompt construction — this is how the P6 surfaces
+   * and the P5 editor share ONE execution path (R5). The `sourceText`/task are
+   * still recorded on the proposal for the apply step and diff preview.
+   */
+  messages?: AiMessage[];
 }
 
 /**
@@ -80,7 +88,7 @@ export interface RunAssistanceInput {
  * Sits between the UI/hooks and `AiService`. Its job is to turn a *task* into a
  * ready-to-review `AiProposal`:
  *
- *   1. pick the built-in task prompt,
+ *   1. pick the built-in task prompt (or use a P6-assembled message list),
  *   2. build messages and enforce that replace/insert tasks actually have text,
  *   3. call `AiService.generate`,
  *   4. package the result for preview — it never applies anything.
@@ -105,7 +113,9 @@ export class AiAssistanceService {
     const sourceText = input.sourceText ?? '';
     // Replace/insert tasks are meaningless without source text; fail early with
     // a clear message rather than sending an empty prompt and misusing quota.
-    if ((definition.mode === 'replace-selection' || definition.mode === 'insert') && !sourceText.trim()) {
+    // This guard applies only to the BUILT-IN path; a P6-assembled request has
+    // already validated its own required inputs during assembly.
+    if (!input.messages && (definition.mode === 'replace-selection' || definition.mode === 'insert') && !sourceText.trim()) {
       throw new AiAssistanceError(
         definition.mode === 'replace-selection'
           ? 'Select some text first — this action modifies a selection.'
@@ -113,17 +123,22 @@ export class AiAssistanceService {
       );
     }
 
-    const promptInput: TaskPromptInput = {
-      sourceText,
-      chapterTitle: input.chapterTitle,
-      instruction: input.instruction,
-    };
-    const { system, user } = definition.build(promptInput);
-
-    const messages: AiMessage[] = [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ];
+    let messages: AiMessage[];
+    if (input.messages && input.messages.length > 0) {
+      // P6 path: the assembled request is authoritative (R5).
+      messages = input.messages;
+    } else {
+      const promptInput: TaskPromptInput = {
+        sourceText,
+        chapterTitle: input.chapterTitle,
+        instruction: input.instruction,
+      };
+      const { system, user } = definition.build(promptInput);
+      messages = [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ];
+    }
 
     const { result, target } = await this.aiService.generate({
       task: input.task,

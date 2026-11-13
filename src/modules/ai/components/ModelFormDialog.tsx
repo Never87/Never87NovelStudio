@@ -19,6 +19,7 @@ export interface ModelFormDialogProps {
     displayName: string;
     temperature: number;
     maxTokens: number;
+    contextWindowTokens: number | null;
     timeoutSeconds: number;
     isDefault: boolean;
     enabled: boolean;
@@ -39,6 +40,7 @@ export function ModelFormDialog({
   const [displayName, setDisplayName] = useState('');
   const [temperature, setTemperature] = useState(String(DEFAULT_TEMPERATURE));
   const [maxTokens, setMaxTokens] = useState(String(DEFAULT_MAX_TOKENS));
+  const [contextWindowTokens, setContextWindowTokens] = useState('');
   const [timeoutSeconds, setTimeoutSeconds] = useState(String(DEFAULT_TIMEOUT_MS / 1000));
   const [isDefault, setIsDefault] = useState(false);
   const [enabled, setEnabled] = useState(true);
@@ -52,6 +54,7 @@ export function ModelFormDialog({
     setDisplayName(model?.displayName ?? '');
     setTemperature(String(model?.temperature ?? DEFAULT_TEMPERATURE));
     setMaxTokens(String(model?.maxTokens ?? DEFAULT_MAX_TOKENS));
+    setContextWindowTokens(model?.contextWindowTokens != null ? String(model.contextWindowTokens) : '');
     setTimeoutSeconds(String((model?.timeout ?? DEFAULT_TIMEOUT_MS) / 1000));
     setIsDefault(model?.isDefault ?? false);
     setEnabled(model?.enabled ?? true);
@@ -65,11 +68,16 @@ export function ModelFormDialog({
       const parsedTemperature = Number(temperature);
       const parsedMaxTokens = Number(maxTokens);
       const parsedTimeout = Number(timeoutSeconds);
+      const trimmedContextWindow = contextWindowTokens.trim();
+      const parsedContextWindow = trimmedContextWindow === '' ? null : Number(trimmedContextWindow);
       if (!Number.isFinite(parsedTemperature) || parsedTemperature < 0 || parsedTemperature > 2) {
         throw new Error('Temperature must be between 0 and 2.');
       }
       if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
         throw new Error('Max tokens must be a positive whole number.');
+      }
+      if (parsedContextWindow !== null && (!Number.isInteger(parsedContextWindow) || parsedContextWindow < 1)) {
+        throw new Error('Context window must be a positive whole number of tokens (or left empty if unknown).');
       }
       if (!Number.isFinite(parsedTimeout) || parsedTimeout < 5 || parsedTimeout > 300) {
         throw new Error('Timeout must be between 5 and 300 seconds.');
@@ -80,6 +88,7 @@ export function ModelFormDialog({
         displayName: displayName.trim(),
         temperature: parsedTemperature,
         maxTokens: parsedMaxTokens,
+        contextWindowTokens: parsedContextWindow,
         timeoutSeconds: parsedTimeout,
         isDefault,
         enabled,
@@ -177,6 +186,22 @@ export function ModelFormDialog({
             />
           </Field>
         </div>
+
+        <Field
+          label="Context window (tokens)"
+          htmlFor="model-context-window"
+          hint="Total context size (input + output), if known. Leave empty if unsure — it is never guessed from Max tokens."
+        >
+          <NumberInput
+            id="model-context-window"
+            value={contextWindowTokens}
+            min={1}
+            step={1024}
+            placeholder="e.g. 128000"
+            onChange={(event) => setContextWindowTokens(event.target.value)}
+            disabled={busy}
+          />
+        </Field>
 
         <Field label="Timeout (seconds)" htmlFor="model-timeout" hint="Requests longer than this are cancelled.">
           <NumberInput

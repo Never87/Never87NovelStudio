@@ -10,3 +10,5 @@ export { ProviderManagementPanel } from './ProviderManagementPanel';
 export { ModelConfigurationPanel } from './ModelConfigurationPanel';
 export { AiAssistancePanel } from './AiAssistancePanel';
 export { EditorAiAssistant } from './EditorAiAssistant';
+export { PromptTemplatesPanel } from './PromptTemplatesPanel';
+export { ContextManagerPanel } from './ContextManagerPanel';

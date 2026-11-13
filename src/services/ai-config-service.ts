@@ -43,6 +43,12 @@ export interface CreateModelInput {
   isDefault?: boolean;
   temperature?: number;
   maxTokens?: number;
+  /**
+   * The model's total context window (input + output) in tokens, if known.
+   * Distinct from `maxTokens` (an OUTPUT cap) — the Context Manager never infers
+   * one from the other (R4). `null` means "unknown".
+   */
+  contextWindowTokens?: number | null;
   timeout?: number;
 }
 
@@ -236,6 +242,7 @@ export class AiConfigService {
       isDefault: input.isDefault ?? false,
       temperature: input.temperature ?? DEFAULT_TEMPERATURE,
       maxTokens: input.maxTokens ?? DEFAULT_MAX_TOKENS,
+      contextWindowTokens: input.contextWindowTokens ?? null,
       timeout: input.timeout ?? DEFAULT_TIMEOUT_MS,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -268,6 +275,8 @@ export class AiConfigService {
       isDefault: input.isDefault ?? existing.isDefault,
       temperature: input.temperature ?? existing.temperature,
       maxTokens: input.maxTokens ?? existing.maxTokens,
+      contextWindowTokens:
+        input.contextWindowTokens !== undefined ? input.contextWindowTokens : existing.contextWindowTokens ?? null,
       timeout: input.timeout ?? existing.timeout,
       updatedAt: now(),
     };

@@ -160,6 +160,19 @@ export const AiModelSchema = z
       .int('maxTokens must be an integer')
       .min(MIN_MAX_TOKENS, `maxTokens must be at least ${MIN_MAX_TOKENS}`)
       .max(MAX_MAX_TOKENS, `maxTokens must be at most ${MAX_MAX_TOKENS}`),
+    /**
+     * The model's TOTAL context-window size in tokens (input + output), when the
+     * user knows it. DELIBERATELY separate from `maxTokens` (which is an OUTPUT
+     * cap): the Context Manager must NEVER infer a context window from
+     * `maxTokens`. Optional / `null` means "unknown; do not invent a value" (R4).
+     */
+    contextWindowTokens: z
+      .number()
+      .int('contextWindowTokens must be an integer')
+      .positive('contextWindowTokens must be positive')
+      .max(MAX_MAX_TOKENS * 10, 'contextWindowTokens is out of range')
+      .nullable()
+      .optional(),
     /** Per-request timeout in milliseconds. */
     timeout: z
       .number()

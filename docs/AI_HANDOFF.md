@@ -493,3 +493,127 @@ baseUrl 采用、word-diff 无损且分类正确、密钥与已知凭据模式�
 - 请求浏览器直连 provider；Anthropic 可能因 CORS 拒绝浏览器调用，连接测试会如实报
   CORS/网络错误。应用为静态站点（无后端代理），此类 provider 在放开浏览器访问或加代理前不可用。
 
+---
+
+## 14. P6（Prompt Engineering Center & AI Context Manager）交接 · 最终验收
+
+> 本节为 P6 追加，P4/P5 正文未改动。所有描述基于磁盘代码与真机实测。
+
+### 14.1 交付范围
+
+- **Prompt Engineering Center**（`/ai/prompt-templates`）：可编辑提示模板（分类、变量、
+  任务关联）、追加式版本历史与恢复、内置模板种子、导入/导出（JSON 包）。
+- **AI Context Manager**（`/ai/context-manager`）：四层上下文（base/dynamic/retrieved/
+  instructions）、上下文项（引用 / 手记 / 指令）管理、优先级、token 预算、实时请求预览。
+- **共享请求管线**：`ContextAssemblyService.assemble()` 产出**唯一** `{ messages, sections,
+  budget, notices }`；预览与执行消费同一 `messages`（R5）。
+
+### 14.2 R1–R10 架构澄清对账（本次最终审计）
+
+| 澄清 | 结论与证据 |
+| --- | --- |
+| **R1 版本追加式** | `PromptTemplateService.updateTemplate`/`restoreVersion` 仅在内容变化时**追加** `PromptTemplateVersion`，绝不改写旧版本。版本表独立、不可变。测试：`verify:prompt` 中 R1 段（起始 v1、编辑→v2、旧快照内容不变、切换 enabled 不产版本、恢复→v3 且 reason=`restored`）；`verify:prompt:ui` 同款真库断言。 |
+| **R2 Provider/Model 仅为偏好** | 模板的 `providerId`/`modelId` 仅存偏好；解析始终走 `AiService.resolveTarget`（唯一真源）。`createTemplate`/`updateTemplate` 仅校验偏好引用存在（`assertPreferencesExist`），不参与解析。 |
+| **R3 上下文引用而非拷贝** | `ContextItem` 对引用型来源只存 `sourceId`，组装时经既有服务**实时解析**；编辑角色后组装内容随之更新。测试：`verify:prompt` R3 段（v1→v2 live、stale 消失）；`verify:prompt:ui` 真库同款。 |
+| **R4 绝不从 maxTokens 推断窗口** | 预算容量只来自模型的 `contextWindowTokens`（已知）或项目 override；`maxTokens` 是输出上限，**绝不**用作窗口。未知窗口保持 `null`、`basis='user-budget'`。测试：两处（logic + ui）断言 `modelContextWindow===null` 且 `maxTokens(2048)` 被忽略。 |
+| **R5 预览/执行一致** | 见 §14.3。 |
+| **R6 导入冲突语义** | 见 §14.4（本次修复）。 |
+| **R7 删除与关联清理** | 见 §14.5（本次修复）。 |
+| **R8 预算不足不静默丢弃** | `required` 优先级项与用户指令不会被静默裁剪；溢出在 `notices` 中以 `overflow`/`missing` 显式报告，`budget.fits` 如实反映。 |
+| **R9 token 为近似值** | `estimateTokens`/`estimateMessagesTokens` 为字符启发式（CJK 加权），预览文案与字段命名为 estimate；不宣称精确。 |
+| **R10 无第二执行引擎** | 组装只产出逻辑请求；协议序列化仅在 P5 Adapter；写回仅经 P5 单一路径。 |
+
+### 14.3 R5 — 预览/执行一致（代码路径证据）
+
+单一 canonical 管线：
+
+```
+ContextAssemblyService.assemble()            // src/services/context-assembly-service.ts
+  → { messages: AiMessage[] }                 // 适配器无关的逻辑请求
+  → AiAssistanceService.run({ messages })      // src/services/ai-assistance-service.ts（直接用）
+  → AiService.generate({ messages })            // src/services/ai-service.ts
+  → adapter.buildRequest({ messages })          // src/services/ai/adapters/*（唯一的协议序列化点）
+```
+
+- **预览**与**执行**都持有同一个 `assemble()` 返回的 `messages` 数组；预览只是渲染它，
+  执行把它原样交给 `AiAssistanceService.run` 的 `messages` 入参（该入参**替换**内置 prompt 构造，
+  不会二次重建）。不存在第二条消息构造路径。
+- 协议（HTTP URL / auth / body 形状）序列化**只在** `ProviderAdapter.buildRequest` 内，UI 与
+  组装层均不感知 `providerType`。
+
+### 14.4 R6 — 导入冲突语义（本次修复）
+
+修复前：同名一律 `skip`，**不同内容也会被静默丢弃**。修复后（`importBundle`）：
+
+- **同名 + 同内容**（内容/变量/分类/任务一致）→ `skipped`，幂等（重复导入收敛，项目不变）。
+- **同名 + 不同内容** → **保留两者**：导入为派生唯一名（`"X (imported)"`、`"X (imported 2)"`…），
+  计入 `conflicted`，原始模板内容不被覆盖，来件内容不丢失。
+- **ID 冲突**：每个导入副本始终经 `createTemplate` 分配**全新 id**，从不覆盖已有记录。
+- 结果对象 `PromptImportResult` 现含 `imported / skipped / conflicted / details[].status`
+  （`imported|skipped|conflict|invalid`），准确上报。
+
+注：幂等判定按**内容一致**（不限名字），因此第二次导入同一冲突包时，命中的是上一次生成的
+`"X (imported)"`，不会再次增生副本。测试：`verify:prompt` §5b（同名同内容跳过、同名异内容
+导入为改名副本且原始保留、新 id、detail=`conflict`、二次导入幂等）；`verify:prompt:ui` R6
+段真库同款。
+
+### 14.5 R7 — 删除与关联清理（本次修复）
+
+- **模板删除**：`deleteTemplate(id, { deleteVersions: true })` 一并删除其版本历史；不触碰
+  其他项目数据。
+- **Provider/Model 删除**（P5 已实现）：清空 `aiTaskConfigs` 中指向该模型的指派、清空全局
+  默认中指向该模型的引用，任务回退到解析链下一级。
+- **模板偏好悬空清理（本次新增）**：`AiConfigService` 删除模型/服务后，模板上的
+  `providerId`/`modelId` 偏好**此前不会被清理**（悬空引用）。新增
+  `PromptTemplateService.clearPreferencesForModel(modelId)` 与
+  `clearPreferencesForProvider(providerId, modelIds[])`：清空悬空偏好、**保留内容与任务关联**、
+  **不追加版本**（偏好非内容）。生产路径在 `use-ai-config.ts` 的 `deleteModel`/`deleteProvider`
+  中调用（先捕获将删的模型 id，再删除，再做 best-effort 清理，清理失败不阻断删除）。
+  测试：`verify:prompt` §5c（模型删除仅清该模型偏好、保留 provider 偏好与内容/版本；provider
+  删除清 provider 偏好与其成员模型偏好；不影响版本历史）；`verify:prompt:ui` R7 段真库同款。
+
+> 说明：清理由 UI 边界 hook 触发，而非在 P5 服务内反向依赖 P6，避免层间耦合；直接调用
+> `aiConfigService.deleteModel`（如测试清理）不会自动清理模板偏好，这是有意的分层取舍，
+> 已在 §14.8 列为已知限制。
+
+### 14.6 数据模型（Dexie `version(7)`，纯附加）
+
+| 表 | 索引 | 说明 |
+| --- | --- | --- |
+| `promptTemplates` | `&id, projectId, category, taskKind, updatedAt` | 当前快照 |
+| `promptTemplateVersions` | `&id, templateId, projectId, [templateId+version], createdAt` | 追加式历史 |
+| `contextItems` | `&id, projectId, layer, updatedAt` | 持久上下文项（引用/手记） |
+| `contextConfigs` | `&id, &projectId, updatedAt` | 每项目一行的配置（唯一 projectId） |
+
+`aiModels` 新增可选字段 `contextWindowTokens`（无索引，无需迁移数据）。
+
+### 14.7 验证结果（实测）
+
+| 测试 | 命令 | 结果 |
+| --- | --- | --- |
+| 类型检查 | `npx tsc -b --noEmit` | ✅ exit 0 |
+| P6 逻辑（Node + Vite 打包） | `npm run verify:prompt` | ✅ **82 / 82** |
+| P6 浏览器/UI（真浏览器 + IndexedDB） | `npm run verify:prompt:ui` | ✅ **27 / 27** |
+| P5 AI 逻辑 | `npm run verify:ai` | ✅ **71 / 71** |
+| P5 AI UI | `npm run verify:ai:ui` | ✅ **26 / 26** |
+| P1–P4 回归 | `verify` / `verify:narrative` / `verify:outline` / `verify:editor` / `verify:markdown` / `verify:writing` / `verify:writing:ui` | ✅ 23/21/28/11/13/13/13 |
+| 生产构建 | `npm run build` | ✅ exit 0 |
+
+### 14.8 已知限制与风险
+
+1. **模板偏好清理仅在 UI hook 路径触发**：绕过 hook 直接调用 `aiConfigService.deleteModel`
+   不会清理模板偏好（见 §14.5 说明）。运行期解析不受影响（`resolveTarget` 有存在性校验），
+   仅模板 UI 可能显示一个悬空偏好直至重新编辑。
+2. **导入同名副本命名**为 `"X (imported N)"`，仅按内容判幂等；若同一包内多条同名且内容互异，
+   会各自生成独立改名副本（符合“不丢内容”原则）。
+3. **token 为近似估算**（字符启发式），非模型分词器精确值；预览已标注为 estimate。
+4. **动态层不持久化**：动态上下文按请求派生，不存 `contextItems`（设计如此）。
+5. **`timeline` 来源暂无解析器**，组装时以 `missing` 提示跳过（预留）。
+6. Key 仍明文存 IndexedDB（P5 限制延续，未在 P6 范围内）。
+
+### 14.9 结论
+
+P6 在 R1–R10 上均满足；本次修复了 R6（同名异内容不再静默丢弃）与 R7（模板悬空偏好清理）
+两处语义缺口，并补充了针对性测试。全部 P1–P6 测试、类型检查与生产构建通过。
+**建议判定：PASS（含第 14.8 节所列、不阻塞范围的已知限制）。**
+

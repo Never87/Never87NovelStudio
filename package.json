@@ -23,7 +23,9 @@
     "verify:writing": "node scripts/p4-verify.cjs",
     "verify:writing:ui": "node scripts/p4-ui-verify.cjs",
     "verify:ai": "node scripts/p5-verify.cjs",
-    "verify:ai:ui": "node scripts/p5-ui-verify.cjs"
+    "verify:ai:ui": "node scripts/p5-ui-verify.cjs",
+    "verify:prompt": "node scripts/p6-verify.cjs",
+    "verify:prompt:ui": "node scripts/p6-ui-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",

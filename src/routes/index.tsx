@@ -83,6 +83,17 @@ const AiAssistancePage = lazy(async () => {
   return { default: mod.AiAssistancePanel };
 });
 
+/** Prompt Engineering Center & Context Manager (P6) — real pages. */
+const PromptTemplatesPage = lazy(async () => {
+  const mod = await import('@/modules/ai/PromptTemplatesPanel');
+  return { default: mod.PromptTemplatesPanel };
+});
+
+const ContextManagerPage = lazy(async () => {
+  const mod = await import('@/modules/ai/ContextManagerPanel');
+  return { default: mod.ContextManagerPanel };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -92,6 +103,8 @@ const REAL_PAGE_NAV_IDS = new Set([
   'provider-management',
   'model-config',
   'ai-assistance',
+  'prompt-templates',
+  'context-manager',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -122,6 +135,9 @@ export const router = createBrowserRouter(
         { path: 'settings/providers', element: withRouteSuspense(<ProviderManagementPage />) },
         { path: 'settings/models', element: withRouteSuspense(<ModelConfigurationPage />) },
         { path: 'ai/assistance', element: withRouteSuspense(<AiAssistancePage />) },
+        // Prompt Engineering Center & Context Manager (P6).
+        { path: 'ai/prompt-templates', element: withRouteSuspense(<PromptTemplatesPage />) },
+        { path: 'ai/context-manager', element: withRouteSuspense(<ContextManagerPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },
