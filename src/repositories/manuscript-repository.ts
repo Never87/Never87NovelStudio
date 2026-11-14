@@ -292,6 +292,45 @@ export class ManuscriptRepository {
     }
   }
 
+  /* --------------------- Project-wide reads (P9 transfer) ----------------- */
+
+  /**
+   * Every chapter draft in a project, ordered by owner then id.
+   *
+   * Added for the P9 transfer layer: a project-wide export needs ALL drafts of a
+   * project without first listing its chapters. Read-only and side-effect free.
+   */
+  async listChapterDraftsByProject(projectId: string): Promise<ChapterDraft[]> {
+    try {
+      const rows = await this.chapterDraftTable.where('projectId').equals(projectId).toArray();
+      return rows.sort((a, b) => (a.ownerId === b.ownerId ? compareId(a.id, b.id) : compareId(a.ownerId, b.ownerId)));
+    } catch (error) {
+      throw new ProjectRepositoryError(`Failed to list chapter drafts of project "${projectId}"`, error);
+    }
+  }
+
+  /** Every scene draft in a project, ordered by owner then id. */
+  async listSceneDraftsByProject(projectId: string): Promise<SceneDraft[]> {
+    try {
+      const rows = await this.sceneDraftTable.where('projectId').equals(projectId).toArray();
+      return rows.sort((a, b) => (a.ownerId === b.ownerId ? compareId(a.id, b.id) : compareId(a.ownerId, b.ownerId)));
+    } catch (error) {
+      throw new ProjectRepositoryError(`Failed to list scene drafts of project "${projectId}"`, error);
+    }
+  }
+
+  /** Every version snapshot in a project, ordered by draft then revision. */
+  async listVersionsByProject(projectId: string): Promise<DraftVersion[]> {
+    try {
+      const rows = await this.versionTable.where('projectId').equals(projectId).toArray();
+      return rows.sort((a, b) =>
+        a.draftId === b.draftId ? a.revision - b.revision || compareId(a.id, b.id) : compareId(a.draftId, b.draftId),
+      );
+    } catch (error) {
+      throw new ProjectRepositoryError(`Failed to list versions of project "${projectId}"`, error);
+    }
+  }
+
   /* ------------------------------- Counts -------------------------------- */
 
   /** Sum of chapter-manuscript word counts in a project. */
@@ -408,4 +447,9 @@ function assertReadable<T>(value: T, schema: { safeParse: (v: unknown) => any },
       result.error,
     );
   }
+}
+
+/** Deterministic id ordering helper (lexicographic by UTF-16 code unit). */
+function compareId(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

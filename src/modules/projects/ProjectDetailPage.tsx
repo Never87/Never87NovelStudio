@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Calendar, CalendarClock, Compass, FileX2, ListTree, FolderKanban, Globe2, Languages, Pencil, Trash2, User, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, CalendarClock, Clapperboard, Compass, FileX2, ListTree, FolderKanban, Globe2, Languages, Pencil, Trash2, User, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
 import { useProject } from '@/hooks';
@@ -10,6 +10,7 @@ import { CharactersPanel } from '@/modules/characters/CharactersPanel';
 import { NarrativePanel } from '@/modules/narrative/NarrativePanel';
 import { OutlinePanel } from '@/modules/outline/OutlinePanel';
 import { WritingPanel } from '@/modules/editor/WritingPanel';
+import { ScenesProsePanel } from '@/modules/editor/ScenesProsePanel';
 import { cn } from '@/utils/cn';
 import { ProjectFormDialog } from './components/ProjectFormDialog';
 import { DeleteProjectDialog } from './components/DeleteProjectDialog';
@@ -26,6 +27,14 @@ const DETAIL_TABS: Array<{ id: DetailTab; label: string; icon: ReactNode }> = [
   { id: 'narrative', label: 'Narrative', icon: <Compass className="size-3.5" aria-hidden /> },
   { id: 'outline', label: 'Outline', icon: <ListTree className="size-3.5" aria-hidden /> },
   { id: 'writing', label: 'Writing', icon: <BookOpen className="size-3.5" aria-hidden /> },
+];
+
+/** Sub-views of the Writing tab: chapter manuscripts vs scene-level prose. */
+type WritingView = 'chapters' | 'scenes';
+
+const WRITING_VIEWS: Array<{ id: WritingView; label: string; icon: ReactNode }> = [
+  { id: 'chapters', label: 'Chapter manuscripts', icon: <BookOpen className="size-3.5" aria-hidden /> },
+  { id: 'scenes', label: 'Scene prose', icon: <Clapperboard className="size-3.5" aria-hidden /> },
 ];
 
 /**
@@ -48,6 +57,9 @@ export function ProjectDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [tab, setTab] = useState<DetailTab>('overview');
+  // Sticky inside the Writing tab, so leaving to the Outline and coming back
+  // returns the author to the prose view they were last working in.
+  const [writingView, setWritingView] = useState<WritingView>('chapters');
 
   const backLink = (
     <ButtonLink
@@ -266,7 +278,43 @@ export function ProjectDetailPage() {
       ) : tab === 'outline' ? (
         <OutlinePanel projectId={project.id} />
       ) : (
-        <WritingPanel projectId={project.id} />
+        <div className="space-y-4">
+          {/* Chapter manuscripts and scene prose are independent prose streams
+              in the data model, so they get separate editors rather than one
+              mixed surface (which would let two autosave targets collide). */}
+          <div
+            role="tablist"
+            aria-label="Writing view"
+            className="flex items-center gap-1 overflow-x-auto"
+          >
+            {WRITING_VIEWS.map((view) => {
+              const selected = writingView === view.id;
+              return (
+                <button
+                  key={view.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => setWritingView(view.id)}
+                  className={cn(
+                    'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                    selected
+                      ? 'bg-surface-muted text-ink'
+                      : 'text-muted hover:bg-surface-muted hover:text-ink',
+                  )}
+                >
+                  {view.icon}
+                  {view.label}
+                </button>
+              );
+            })}
+          </div>
+          {writingView === 'chapters' ? (
+            <WritingPanel projectId={project.id} />
+          ) : (
+            <ScenesProsePanel projectId={project.id} />
+          )}
+        </div>
       )}
 
       {/* Edit dialog reuses the shared form; initialProject pre-fills it and

@@ -39,6 +39,21 @@ export interface UseChapterEditorResult {
   reload: () => Promise<void>;
   /** Manual snapshot of the current content. */
   createVersion: (label?: string) => Promise<void>;
+  /**
+   * Restores a historical version safely.
+   *
+   * Order matters and is the whole point of exposing this from the hook (rather
+   * than calling the service directly from the dialog):
+   *   1. FLUSH pending autosave, so a debounced write cannot land AFTER the
+   *      restore and resurrect the pre-restore text.
+   *   2. Restore (append-only in the Service).
+   *   3. REBIND the autosave engine to the restored draft. Binding bumps the
+   *      engine generation and clears any pending text, so a write that was
+   *      still in flight against the OLD revision is discarded and can never
+   *      overwrite the restored content.
+   *   4. Reload the document so the editor shows the restored prose.
+   */
+  restoreVersion: (versionId: string) => Promise<void>;
 }
 
 /**
@@ -188,6 +203,40 @@ export function useChapterEditor(
     [chapterId],
   );
 
+  /**
+   * Restore with autosave coordination — see `UseChapterEditorResult.restoreVersion`.
+   *
+   * Flushing first prevents a queued save from re-applying pre-restore text, and
+   * rebinding the engine (a generation bump + `pending` reset) guarantees a
+   * slower in-flight save for the old revision is discarded rather than written
+   * over the freshly restored content.
+   */
+  const restoreVersion = useCallback(
+    async (versionId: string) => {
+      if (!projectId || !chapterId) return;
+      const engine = engineRef.current;
+
+      // 1. Persist/clear any pending edits so nothing overwrites the restore.
+      await engine?.flush();
+
+      // 2. Append-only restore (Service writes a new revision + restore snapshot).
+      const { draft } = await manuscriptService.restoreVersion(versionId);
+
+      // 3. Rebinding discards any stale pending/in-flight text and adopts the
+      //    restored revision so the NEXT autosave is based on the new content.
+      engine?.bind({
+        projectId,
+        ownerId: chapterId,
+        revision: draft.revision,
+        content: draft.content,
+      });
+
+      // 4. Refresh the document/UI from the database.
+      await load(projectId, chapterId);
+    },
+    [projectId, chapterId, load],
+  );
+
   // Warn before leaving with unsaved text (browser-level back/refresh guard).
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -211,7 +260,19 @@ export function useChapterEditor(
       retry,
       reload,
       createVersion,
+      restoreVersion,
     }),
-    [document, status, error, autosave, onChange, saveNow, retry, reload, createVersion],
+    [
+      document,
+      status,
+      error,
+      autosave,
+      onChange,
+      saveNow,
+      retry,
+      reload,
+      createVersion,
+      restoreVersion,
+    ],
   );
 }

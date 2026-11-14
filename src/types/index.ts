@@ -166,4 +166,7 @@ export {
   MAX_EXTRACTION_BODY_CHARS,
 } from '@/schemas/extraction';
 
+/* --------------------- P9 — Version & Data Management --------------------- */
+export type { ProjectSnapshot, SnapshotReason, SnapshotCounts } from '@/schemas/snapshot';
+export { SNAPSHOT_REASONS, MAX_SNAPSHOT_LABEL_CHARS } from '@/schemas/snapshot';
 

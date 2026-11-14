@@ -226,7 +226,8 @@ function ChapterEditorSurface({
   historyOpen: boolean;
   onHistoryOpenChange: (open: boolean) => void;
 }) {
-  const { document, status, error, autosave, onChange, saveNow, retry, reload, createVersion } =
+
+  const { document, status, error, autosave, onChange, saveNow, retry, reload, createVersion, restoreVersion } =
     useChapterEditor(projectId, chapterId);
 
   // Live counter mirrors the derived count the Service will persist, so the
@@ -370,13 +371,15 @@ function ChapterEditorSurface({
       <VersionHistoryDialog
         open={historyOpen}
         versions={versions}
+        currentRevision={document.draft.revision}
         onClose={() => onHistoryOpenChange(false)}
         onCreateVersion={async (label) => {
           await createVersion(label);
         }}
         onRestore={async (versionId) => {
-          await manuscriptService.restoreVersion(versionId);
-          await reload();
+          // Hook flushes pending autosave, restores, rebinds the engine and
+          // reloads — so a queued save can never overwrite the restored text.
+          await restoreVersion(versionId);
         }}
       />
     </Card>

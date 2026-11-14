@@ -121,6 +121,28 @@ export class PromptRepository {
     return rows.sort((a, b) => b.version - a.version);
   }
 
+  /**
+   * Every template version of a project, ordered by template then version
+   * ascending.
+   *
+   * Added for the P9 transfer layer: a project-wide export needs all history in
+   * a deterministic order without walking each template separately. Read-only.
+   */
+  async listVersionsByProject(projectId: string): Promise<PromptTemplateVersion[]> {
+    let rows: PromptTemplateVersion[];
+    try {
+      rows = await this.versionTable.where('projectId').equals(projectId).toArray();
+    } catch (error) {
+      throw new ProjectRepositoryError(`Failed to list template versions for project "${projectId}"`, error);
+    }
+    rows.forEach((row, index) =>
+      assertReadable(row, PromptTemplateVersionSchema, `Failed to read template version (record at position ${index})`),
+    );
+    return rows.sort((a, b) =>
+      a.templateId === b.templateId ? a.version - b.version : a.templateId < b.templateId ? -1 : 1,
+    );
+  }
+
   async getVersion(id: string): Promise<PromptTemplateVersion | null> {
     let row: PromptTemplateVersion | undefined;
     try {

@@ -37,6 +37,8 @@ export const ID_PREFIX = {
   sourceDocument: 'doc',
   documentSection: 'dsec',
   extractionRecord: 'ext',
+  // P9 — Version & Data Management (project snapshots).
+  projectSnapshot: 'snap',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -173,5 +175,10 @@ export function createDocumentSectionId(): string {
 /** Convenience wrapper for extraction-record ids. */
 export function createExtractionRecordId(): string {
   return createId(ID_PREFIX.extractionRecord);
+}
+
+/** Convenience wrapper for project-snapshot ids (P9 — Version & Data). */
+export function createProjectSnapshotId(): string {
+  return createId(ID_PREFIX.projectSnapshot);
 }
 

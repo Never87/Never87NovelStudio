@@ -21,6 +21,7 @@ import { KnowledgeRepository } from '@/repositories/knowledge-repository';
 import { ContinuityRepository } from '@/repositories/continuity-repository';
 import { AnalysisRepository } from '@/repositories/analysis-repository';
 import { ImportRepository } from '@/repositories/import-repository';
+import { SnapshotRepository } from '@/repositories/snapshot-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -97,6 +98,7 @@ export class ProjectService {
   private readonly continuityRepository: ContinuityRepository;
   private readonly analysisRepository: AnalysisRepository;
   private readonly importRepository: ImportRepository;
+  private readonly snapshotRepository: SnapshotRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -112,6 +114,9 @@ export class ProjectService {
     continuityRepository: ContinuityRepository = new ContinuityRepository(),
     analysisRepository: AnalysisRepository = new AnalysisRepository(),
     importRepository: ImportRepository = new ImportRepository(),
+    // Appended LAST with a default so every existing constructor call (and the
+    // existing tests) keep working unchanged.
+    snapshotRepository: SnapshotRepository = new SnapshotRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -126,6 +131,7 @@ export class ProjectService {
     this.continuityRepository = continuityRepository;
     this.analysisRepository = analysisRepository;
     this.importRepository = importRepository;
+    this.snapshotRepository = snapshotRepository;
   }
 
   /**
@@ -246,6 +252,8 @@ export class ProjectService {
    *
    * - Child deletion is idempotent (`deleteByProjectId` treats "nothing to
    *   delete" as success), so deleting a project with no children is fine.
+   * - Project snapshots (P9) are removed too, before the project row, so they
+   *   can never outlive their project.
    * - The project delete still fails loudly when the project itself is missing,
    *   preserving the existing P1 contract.
    * - Child rows are removed by `projectId` index, not by loading and deleting
@@ -279,6 +287,13 @@ export class ProjectService {
       // P8: imported documents + their sections + extraction records. The
       // repository deletes child-first (extraction → sections → documents).
       await this.importRepository.deleteByProjectId(id);
+      // P9: project snapshots are project-owned metadata. They are deleted
+      // HERE — after every business collection but BEFORE the project row — so
+      // a failure leaves the project intact (the whole delete throws) rather
+      // than persisting "project gone, snapshots orphaned". This matches the
+      // established child-first, idempotent delete strategy (each repository
+      // method is its own safe IndexedDB transaction).
+      await this.snapshotRepository.deleteByProjectId(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

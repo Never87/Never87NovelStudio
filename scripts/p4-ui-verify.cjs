@@ -247,6 +247,25 @@ async function main() {
 
   await sleep(1200);
 
+  // The Writing tab now has two sub-views ("Chapter manuscripts" / "Scene prose").
+  // This test drives the chapter editor, so make sure that sub-view is active
+  // instead of relying on whichever one happens to be selected by default.
+  const chapterViewSelected = await cdp.eval(`(() => {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const labels = tabs.map((t) => (t.textContent || '').trim());
+    const chapterTab = tabs.find((t) => (t.textContent || '').trim() === 'Chapter manuscripts');
+    if (chapterTab && chapterTab.getAttribute('aria-selected') !== 'true') chapterTab.click();
+    const active = tabs.find((t) => (t.textContent || '').trim() === 'Chapter manuscripts');
+    return { found: !!chapterTab, selected: active?.getAttribute('aria-selected') === 'true', labels };
+  })()`);
+  record(
+    'Writing view: chapter manuscripts sub-view is active',
+    chapterViewSelected?.found === true && chapterViewSelected?.selected === true,
+    JSON.stringify(chapterViewSelected),
+  );
+
+  await sleep(800);
+
   // ---- Editor surface renders with the first chapter ----
   const surface = await cdp.eval(`(() => {
     const editable = document.querySelector('[aria-label="Chapter manuscript"]');

@@ -22,6 +22,7 @@
     "verify:markdown": "node scripts/p4-markdown-unit.cjs",
     "verify:writing": "node scripts/p4-verify.cjs",
     "verify:writing:ui": "node scripts/p4-ui-verify.cjs",
+    "verify:writing:scene:ui": "node scripts/p4-scene-ui-verify.cjs",
     "verify:ai": "node scripts/p5-verify.cjs",
     "verify:ai:ui": "node scripts/p5-ui-verify.cjs",
     "verify:prompt": "node scripts/p6-verify.cjs",
@@ -39,7 +40,21 @@
     "verify:import:ui": "node scripts/p8-migration-ui-verify.cjs",
         "verify:integration":  "node scripts/p8-integration-verify.cjs",
     "verify:integration:idb":  "node scripts/p8-integration-idb-verify.cjs",
-    "verify:integration:ui":  "node scripts/p8-integration-ui-verify.cjs"
+    "verify:integration:ui":  "node scripts/p8-integration-ui-verify.cjs",
+    "verify:import:workflow:ui": "node scripts/p8-import-workflow-ui-verify.cjs",
+    "verify:transfer": "node scripts/p9-transfer-unit.cjs",
+    "verify:transfer:idb": "node scripts/p9-transfer-idb-verify.cjs",
+    "verify:history": "node scripts/p9-history-unit.cjs",
+    "verify:b2:ui:idb": "node scripts/p9-b2-idb-verify.cjs",
+    "verify:snapshot": "node scripts/p9-snapshot-unit.cjs",
+    "verify:snapshot:idb": "node scripts/p9-snapshot-idb-verify.cjs",
+    "verify:snapshot:service": "node scripts/p9-snapshot-service-unit.cjs",
+    "verify:snapshot:service:idb": "node scripts/p9-snapshot-service-idb-verify.cjs",
+    "verify:snapshots:logic": "node scripts/p9-snapshots-ui-unit.cjs",
+    "verify:snapshots:ui": "node scripts/p9-snapshots-ui-verify.cjs",
+    "verify:backup": "node scripts/p9-backup-unit.cjs",
+    "verify:backup:idb": "node scripts/p9-backup-idb-verify.cjs",
+    "verify:backup:ui": "node scripts/p9-backup-ui-verify.cjs"
   },
   "dependencies": {
     "@tiptap/pm": "^3.33.1",
@@ -65,3 +80,4 @@
     "vite": "^8.3.7"
   }
 }
+

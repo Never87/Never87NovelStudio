@@ -5,6 +5,7 @@ import { NarrativeService } from './narrative-service';
 import { OutlineService } from './outline-service';
 import { SceneService } from './scene-service';
 import { ManuscriptService } from './manuscript-service';
+import { ManuscriptHistoryService } from './manuscript-history-service';
 import { ManuscriptTransferService } from './manuscript-transfer-service';
 import { AiService } from './ai-service';
 import { AiConfigService } from './ai-config-service';
@@ -20,6 +21,8 @@ import { ExtractionService } from './extraction-service';
 
 import { ReviewService } from './review-service';
 import { IntegrationService } from './integration-service';
+import { SnapshotService } from './snapshot-service';
+import { BackupService } from './backup-service';
 
 /**
  * Module-level application Services.
@@ -38,6 +41,7 @@ export const narrativeService = new NarrativeService();
 export const outlineService = new OutlineService();
 export const sceneService = new SceneService();
 export const manuscriptService = new ManuscriptService();
+export const manuscriptHistoryService = new ManuscriptHistoryService();
 export const manuscriptTransferService = new ManuscriptTransferService();
 
 /**
@@ -120,6 +124,30 @@ export const reviewService = new ReviewService({ importService, extractionServic
  */
 export const integrationService = new IntegrationService({ importService });
 
+/**
+ * Project Snapshots service (P9 Batch 3-2).
+ *
+ * Business layer over `SnapshotRepository` + the P9 B1 transfer foundation:
+ * captures a project's COMPLETE state as an immutable `ProjectSnapshot` and
+ * restores one ATOMICALLY (pre-restore safety snapshot + single 21-store
+ * readwrite transaction). Pure service — NO UI, routes, hooks or editor
+ * coordination live here; a future restore UI must follow `RESTORE_UI_LIFECYCLE`
+ * (flush editors before, reload project/editor state after). Defaults to the
+ * singleton `db` via each dependency's own default.
+ */
+export const projectSnapshotService = new SnapshotService();
+
+/**
+ * Project Backup service (P9 Batch 4-1).
+ *
+ * Thin file-export layer over the P9 B1 transfer foundation: serialises ONE
+ * project to a canonical `.n87novel` file (all 19 project-owned collections,
+ * never secrets) for download. It reuses B1 for serialisation, validation,
+ * integrity and collection selection, never WRITES project data, and does not
+ * support workspace export. Restoring a backup file is a later batch.
+ */
+export const backupService = new BackupService();
+
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
 export { WorldService };
@@ -151,6 +179,11 @@ export {
   DraftConflictError,
   ChapterLockedError,
 } from './manuscript-service';
+export { ManuscriptHistoryService } from './manuscript-history-service';
+export type {
+  ManuscriptHistoryEntry,
+  ProjectHistory,
+} from './manuscript-history-service';
 export { ManuscriptTransferService } from './manuscript-transfer-service';
 export type {
   ImportPreviewChapter,
@@ -343,3 +376,31 @@ export type {
   ApplyIntegrationInput,
 } from './integration-service';
 export type { ConflictStrategy, ConflictResolution } from '@/schemas/extraction';
+
+/* --------------------------- Snapshots (P9.3) ---------------------------- */
+
+export {
+  SnapshotService,
+  SnapshotServiceError,
+  SNAPSHOT_ERROR_CODES,
+  RESTORE_UI_LIFECYCLE,
+  isQuotaError,
+} from './snapshot-service';
+export type {
+  SnapshotErrorCode,
+  SnapshotRestorePhase,
+  CreateSnapshotOptions,
+  RestoreSnapshotResult,
+} from './snapshot-service';
+
+/* --------------------------- Backup (P9.4) ------------------------------- */
+
+export {
+  BackupService,
+  BackupServiceError,
+  PROJECT_BACKUP_EXTENSION,
+  PROJECT_BACKUP_MIME,
+  sanitizeBackupFileNameSegment,
+  buildBackupFileName,
+} from './backup-service';
+export type { ProjectBackupFile } from './backup-service';

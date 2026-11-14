@@ -17,6 +17,7 @@ import type {
   KnowledgeEntry,
   NarrativePlan,
   NovelProject,
+  ProjectSnapshot,
   PromptTemplate,
   PromptTemplateVersion,
   Scene,
@@ -85,6 +86,8 @@ export class NovelStudioDb extends Dexie {
   documentSections!: Table<DocumentSection, string>;
   /** Candidate extracted story information — many per document (P8). */
   extractionRecords!: Table<ExtractionRecord, string>;
+  /** Immutable point-in-time captures of an entire project — many per project (P9). */
+  projectSnapshots!: Table<ProjectSnapshot, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -475,6 +478,50 @@ export class NovelStudioDb extends Dexie {
       documentSections: '&id, projectId, documentId, [documentId+order], parentId',
       extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
     });
+
+    // v13 — Project Snapshots (P9 Batch 3).
+    //   projectSnapshots: &id, projectId, [projectId+createdAt], createdAt
+    //                     -> projectId isolates a project's snapshots (every
+    //                        query is scoped by it); the compound
+    //                        [projectId+createdAt] index lists a project's
+    //                        snapshots NEWEST-FIRST without a sort; the plain
+    //                        createdAt index supports a global chronological
+    //                        ordering if ever needed. `payload`/`counts`/
+    //                        `integrity` are nested objects and are NOT indexed
+    //                        (the list view reads denormalised metadata only).
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v12 store is restated
+    // verbatim; the only change is the new empty `projectSnapshots` store. No
+    // existing row is added, removed or mutated by the migration. Snapshots are
+    // a project-owned table but are DELIBERATELY NOT part of the transfer
+    // payload (a snapshot must never contain snapshots); see collection-registry.
+    this.version(13).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+      projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+    });
   }
 }
 
@@ -495,5 +542,18 @@ export function getDb(): NovelStudioDb {
     instance = new NovelStudioDb();
   }
   return instance;
+}
+
+/**
+ * Makes an already-constructed database the process-wide singleton.
+ *
+ * Used ONLY by the verification harnesses so that every service constructed with
+ * its default dependencies talks to one explicitly-named, throw-away database
+ * instead of the real `never87-novel-studio` store. It performs no I/O. Calling
+ * it again simply replaces the reference; the previously-installed instance is
+ * NOT closed, so the caller stays responsible for cleaning up its own data.
+ */
+export function __setDbForTesting(database: NovelStudioDb): void {
+  instance = database;
 }
 

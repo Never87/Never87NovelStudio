@@ -1,4 +1,4 @@
-import { NovelStudioDb, getDb } from './database';
+import { NovelStudioDb, getDb, __setDbForTesting } from './database';
 
 /**
  * Database entry point.
@@ -8,7 +8,7 @@ import { NovelStudioDb, getDb } from './database';
  * (P1-B onwards) so IndexedDB access stays in one place.
  */
 
-export { NovelStudioDb, getDb };
+export { NovelStudioDb, getDb, __setDbForTesting };
 
 /** The single application database instance. */
 export const db: NovelStudioDb = getDb();

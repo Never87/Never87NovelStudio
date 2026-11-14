@@ -122,6 +122,58 @@ const ProjectIntegrationPage = lazy(async () => {
   return { default: mod.ProjectIntegrationPanel };
 });
 
+/**
+ * Import workflow stages (P8 Batch 6) — real pages.
+ *
+ * These four routes replace their `ModulePlaceholder`s. Each page mounts the
+ * shared `ImportWorkflowProvider` through the workflow shell, and the document
+ * selection is persisted in `sessionStorage`, so it survives the navigation
+ * BETWEEN these routes. The remaining two stages (Review Center, Integration)
+ * keep their existing P8 Batch 4 / 5 pages — this batch does not duplicate them.
+ */
+const ManuscriptImportPage = lazy(async () => {
+  const mod = await import('@/modules/import/workflow/ManuscriptImportPage');
+  return { default: mod.ManuscriptImportPage };
+});
+
+const DocumentParserPage = lazy(async () => {
+  const mod = await import('@/modules/import/workflow/DocumentParserPage');
+  return { default: mod.DocumentParserPage };
+});
+
+const StructureRecognitionPage = lazy(async () => {
+  const mod = await import('@/modules/import/workflow/StructureRecognitionPage');
+  return { default: mod.StructureRecognitionPage };
+});
+
+const InformationExtractionPage = lazy(async () => {
+  const mod = await import('@/modules/import/workflow/InformationExtractionPage');
+  return { default: mod.InformationExtractionPage };
+});
+
+/** Version & Data Management (P9 Batch 2) — real pages. */
+const VersionHistoryPage = lazy(async () => {
+  const mod = await import('@/modules/data/VersionHistoryPage');
+  return { default: mod.VersionHistoryPage };
+});
+
+const DiffViewerPage = lazy(async () => {
+  const mod = await import('@/modules/data/DiffViewerPage');
+  return { default: mod.DiffViewerPage };
+});
+
+/** Project Snapshots (P9 Batch 3-3) — real page. */
+const ProjectSnapshotsPage = lazy(async () => {
+  const mod = await import('@/modules/data/ProjectSnapshotsPage');
+  return { default: mod.ProjectSnapshotsPage };
+});
+
+/** Backup & Restore (P9 Batch 4-1) — real page (single-project backup export). */
+const BackupRestorePage = lazy(async () => {
+  const mod = await import('@/modules/data/BackupRestorePage');
+  return { default: mod.BackupRestorePage };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -138,6 +190,13 @@ const REAL_PAGE_NAV_IDS = new Set([
   'plot-hole',
   'extraction-review',
   'project-integration',
+  'manuscript-import',
+  'document-parser',
+  'structure-recognition',
+  'information-extraction',
+  'version-history',
+  'diff-viewer',
+  'snapshots',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -175,10 +234,22 @@ export const router = createBrowserRouter(
         { path: 'ai/knowledge-base', element: withRouteSuspense(<KnowledgeBasePage />) },
         { path: 'ai/continuity-manager', element: withRouteSuspense(<ContinuityManagerPage />) },
         { path: 'ai/plot-hole-detector', element: withRouteSuspense(<PlotHoleDetectorPage />) },
-        // Extraction Review Center (P8 Batch 4).
+        // Extraction Review Center (P8 Batch 4) — unchanged, still the review surface.
         { path: 'import/review-center', element: withRouteSuspense(<ExtractionReviewPage />) },
-        // Project Integration (P8 Batch 5).
+        // Project Integration (P8 Batch 5) — unchanged, still the integration surface.
         { path: 'import/project-integration', element: withRouteSuspense(<ProjectIntegrationPage />) },
+        // Import workflow stages (P8 Batch 6) — must stay above `moduleRoutes`.
+        { path: 'import/manuscript', element: withRouteSuspense(<ManuscriptImportPage />) },
+        { path: 'import/document-parser', element: withRouteSuspense(<DocumentParserPage />) },
+        { path: 'import/structure-recognition', element: withRouteSuspense(<StructureRecognitionPage />) },
+        { path: 'import/information-extraction', element: withRouteSuspense(<InformationExtractionPage />) },
+        // Version & Data Management (P9 Batch 2) — real pages.
+        { path: 'data/version-history', element: withRouteSuspense(<VersionHistoryPage />) },
+        { path: 'data/diff-viewer', element: withRouteSuspense(<DiffViewerPage />) },
+        // Project Snapshots (P9 Batch 3-3) — real page.
+        { path: 'data/snapshots', element: withRouteSuspense(<ProjectSnapshotsPage />) },
+        // Backup & Restore (P9 Batch 4-1) — real page (single-project export).
+        { path: 'data/backup-restore', element: withRouteSuspense(<BackupRestorePage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },

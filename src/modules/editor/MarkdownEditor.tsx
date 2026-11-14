@@ -25,6 +25,8 @@ export interface MarkdownEditorProps {
   editorKey: string;
   /** Called on every user edit with the current Markdown. */
   onChange: (markdown: string) => void;
+  /** Accessible name of the editing surface (scenes override the chapter default). */
+  ariaLabel?: string;
   /** Read-only (locked chapter or while a save is failing). */
   editable?: boolean;
   /** Autofocus on mount (new documents). */
@@ -40,6 +42,7 @@ export function MarkdownEditor({
   value,
   editorKey,
   onChange,
+  ariaLabel = 'Chapter manuscript',
   editable = true,
   autoFocus = false,
   onSaveShortcut,
@@ -65,7 +68,7 @@ export function MarkdownEditor({
             'prose-editor focus:outline-none',
             'max-w-none text-[15px] leading-7 text-ink',
           ),
-          'aria-label': 'Chapter manuscript',
+          'aria-label': ariaLabel,
           spellcheck: 'true',
         },
       },
@@ -74,8 +77,9 @@ export function MarkdownEditor({
         onChangeRef.current(getMarkdown(current));
       },
     },
-    // Rebuild the editor when the document identity changes.
-    [editorKey],
+    // Rebuild the editor when the document identity OR its accessible name
+    // changes (chapter and scene surfaces must never be reused silently).
+    [editorKey, ariaLabel],
   );
 
   // Push content updates that did not come from typing (e.g. version restore
