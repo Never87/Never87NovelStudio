@@ -246,7 +246,7 @@ async function main() {
   /* SCOPE COPY */
   const scope = r.scope || {};
   record('scope: states single-project backup', scope.mentionsSingleProject === true, String(scope.mentionsSingleProject));
-  record('scope: states restore comes in a later batch', scope.mentionsRestoreLater === true, String(scope.mentionsRestoreLater));
+  record('scope: states restore is now SUPPORTED (no stale "later batch" claim)', scope.mentionsRestoreSupported === true, String(scope.mentionsRestoreSupported));
   record('scope: distinguishes from Project Snapshots', scope.mentionsSnapshotsDifferent === true, String(scope.mentionsSnapshotsDifferent));
   record('scope: mentions the 19 project collections', scope.mentions19 === true, String(scope.mentions19));
 

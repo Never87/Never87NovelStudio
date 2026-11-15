@@ -10,6 +10,7 @@ import { ManuscriptTransferService } from './manuscript-transfer-service';
 import { AiService } from './ai-service';
 import { AiConfigService } from './ai-config-service';
 import { AiAssistanceService } from './ai-assistance-service';
+import { BlurbService } from './blurb-service';
 import { PromptTemplateService } from './prompt-template-service';
 import { ContextManagerService } from './context-manager-service';
 import { ContextAssemblyService } from './context-assembly-service';
@@ -23,6 +24,11 @@ import { ReviewService } from './review-service';
 import { IntegrationService } from './integration-service';
 import { SnapshotService } from './snapshot-service';
 import { BackupService } from './backup-service';
+import { BackupPreviewService } from './backup-preview-service';
+import { ProjectRestoreService } from './project-restore-service';
+import { BookAssemblyService } from './book-assembly-service';
+import { coverService } from './cover-service';
+import { PortfolioService } from './portfolio-service';
 
 /**
  * Module-level application Services.
@@ -54,6 +60,8 @@ export const manuscriptTransferService = new ManuscriptTransferService();
 export const aiService = new AiService();
 export const aiConfigService = new AiConfigService();
 export const aiAssistanceService = new AiAssistanceService(aiService);
+/** Blurb Generator service (P9 Batch D) — shares the single `aiService`. */
+export const blurbService = new BlurbService(aiService);
 
 /**
  * Prompt Engineering Center & Context Manager services (P6).
@@ -147,6 +155,73 @@ export const projectSnapshotService = new SnapshotService();
  * support workspace export. Restoring a backup file is a later batch.
  */
 export const backupService = new BackupService();
+
+/**
+ * Project Backup PREVIEW service (P9 Batch 4-2).
+ *
+ * READ-ONLY companion to `backupService`. Parses + validates a user-selected
+ * `.n87novel` file through the P9 B1 transfer foundation and returns a typed
+ * preview (metadata + all 19 collection counts + integrity + whether the source
+ * project already exists locally). It never writes, never repairs an invalid
+ * file, rejects workspace packages, and never exposes the raw payload. Restoring
+ * a backup is a LATER batch — this service only inspects files.
+ */
+export const backupPreviewService = new BackupPreviewService();
+
+/**
+ * Project Backup RESTORE service (P9 Batch 4-3).
+ *
+ * The only writer of restored backup data. Turns a VALIDATED `.n87novel` entry
+ * into project data in one of two explicit modes:
+ *   - `restoreAsNewProject` — fresh project id, full id remap, atomic insert;
+ *   - `replaceExistingProject` — explicit target id, pre-restore safety snapshot
+ *     then atomic owner-scoped replacement.
+ * Reuses B1 (validate/integrity/id-remap) and B3 (safety snapshot); never
+ * re-implements a transfer format or duplicates validation. It re-validates the
+ * payload before writing (a stale preview is never authorisation). Pure service:
+ * the UI must flush/reload editors around it (see `BACKUP_RESTORE_UI_LIFECYCLE`).
+ */
+export const projectRestoreService = new ProjectRestoreService();
+
+/**
+ * Book Assembly service (P9 Batch A — Publishing Foundation).
+ *
+ * READ-ONLY assembler that builds the `BookAssemblyModel` consumed by the
+ * shared publishing pipeline (`FormattingPipeline` + presets → `RenderedDocument`
+ * → TXT/Markdown/HTML writers). It retrieves data through the existing
+ * `OutlineService` (canonical volume/chapter order), `ManuscriptService`
+ * (`ChapterDraft` prose, the AUTHORITATIVE chapter body) and `SceneService`
+ * (scene COUNTS only — scene prose is never concatenated into a chapter). It
+ * performs NO writes, saves, snapshots or mutations, and is project-scoped.
+ */
+export const bookAssemblyService = new BookAssemblyService();
+
+/**
+ * Book Covers service (P9 Batch D).
+ *
+ * Business layer over stored cover-image resources: validates an uploaded image
+ * (PNG/JPEG/WebP, size + dimension limits), stores its bytes as a Blob in the
+ * `coverAssets` table, and points the project at it via the short
+ * `cover: "asset:<id>"` reference (updated through `ProjectService`). Superseded
+ * assets are cleaned up. It also resolves a project's CURRENT cover for display
+ * and as bytes for the EPUB/PDF writers — degrading gracefully to a placeholder
+ * when an `asset:` reference has no matching asset on this device (e.g. after an
+ * import, since cover binaries are device-local and excluded from the JSON
+ * transfer payload).
+ */
+
+export { coverService };
+
+/**
+ * Portfolio service (P9 Batch E).
+ *
+ * Business layer for the author's curated catalog. Joins project rows with
+ * optional `PortfolioProfile` DISPLAY overrides into resolved `PortfolioEntry`
+ * objects and upserts/removes profiles. It never duplicates the project's
+ * description/blurb/cover/genre/status (those are read live) and never touches
+ * `NovelProject.description` or `NovelProject.blurb`.
+ */
+export const portfolioService = new PortfolioService();
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -404,3 +479,90 @@ export {
   buildBackupFileName,
 } from './backup-service';
 export type { ProjectBackupFile } from './backup-service';
+
+/* ------------------------- Backup Preview (P9.4-2) ---------------------- */
+
+export {
+  BackupPreviewService,
+  BackupImportError,
+  MAX_BACKUP_FILE_BYTES,
+} from './backup-preview-service';
+export type {
+  BackupImportErrorCode,
+  BackupPreview,
+  BackupCollectionCount,
+  BackupPreviewInput,
+  PreviewBackupOptions,
+  ValidatedBackupEntry,
+} from './backup-preview-service';
+
+/* ------------------------- Backup Restore (P9.4-3) --------------------- */
+
+export {
+  ProjectRestoreService,
+  ProjectRestoreError,
+  PROJECT_RESTORE_ERROR_CODES,
+  BACKUP_RESTORE_UI_LIFECYCLE,
+} from './project-restore-service';
+export type {
+  ProjectRestoreErrorCode,
+  ProjectRestorePhase,
+  ProjectRestoreResult,
+  ProjectRestoreOptions,
+} from './project-restore-service';
+
+/* ---------------------- Book Assembly (P9 Batch A) --------------------- */
+
+export { BookAssemblyService, BookAssemblyError } from './book-assembly-service';
+export type {
+  AssembleOptions,
+  BookAssemblyDeps,
+} from './book-assembly-service';
+
+/* ------------------- Full-Book Export (P9 Batch C) --------------------- */
+
+export {
+  exportFullBook,
+  previewFullBook,
+  downloadExport,
+} from './full-book-export-service';
+export type {
+  FullBookExportResult,
+  FullBookExportDeps,
+  FullBookExportOptions,
+  FullBookPreviewResult,
+  FullBookPreviewDeps,
+  ExportCoverInput,
+} from './full-book-export-service';
+
+/* ------------------------ Book Covers (P9 Batch D) -------------------- */
+
+export {
+  CoverService,
+  CoverServiceError,
+  COVER_ERROR_CODES,
+  isCoverErrorCode,
+} from './cover-service';
+export type {
+  CoverErrorCode,
+  CoverResolution,
+  CurrentCover,
+  UploadCoverOptions,
+  UploadCoverResult,
+} from './cover-service';
+
+/* ------------------------ Blurb Generator (P9 Batch D) ---------------- */
+
+export { BlurbService, BlurbServiceError } from './blurb-service';
+export type {
+  BlurbProposal,
+  GenerateBlurbInput,
+  BlurbServiceDeps,
+} from './blurb-service';
+export type { BlurbLength, BlurbStyle, BlurbContext } from '@/modules/publishing/blurb/blurb-prompt';
+
+/* --------------------------- Portfolio (P9 Batch E) ------------------- */
+
+export { PortfolioService, PortfolioServiceError, PORTFOLIO_ERROR_CODES } from './portfolio-service';
+export type { PortfolioErrorCode } from './portfolio-service';
+

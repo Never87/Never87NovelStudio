@@ -8,10 +8,11 @@
  * PASS/FAIL lines.
  *
  * Two phases (see the driver for detail):
- *   A. REAL v12 → v13 migration: a v12 database is built with the app's own v12
- *      store strings, seeded, then upgraded by opening it with the real v13
- *      `NovelStudioDb`. Pre-existing rows must survive; the new store must exist
- *      and be empty, then writable.
+ *   A. REAL v12 → current migration: a v12 database is built with the app's own
+ *      v12 store strings, seeded, then upgraded by opening it with the current
+ *      `NovelStudioDb` class. The additive chain runs v12 → … → current (now v15
+ *      after Batch D/E). Pre-existing rows must survive; the projectSnapshots
+ *      store (introduced at v13) must exist, be empty, then be writable.
  *   B. SnapshotRepository + ProjectService cascade on a real, isolated database:
  *      create/get, immutability, validation-before-write, newest-first scoped
  *      listing, scoped idempotent deletes, and cascade-on-project-delete.
@@ -171,7 +172,21 @@ async function main() {
   record('migration: driver completed', mig.ok === true, mig.reason || '');
   if (mig.ok) {
     record('migration: started at schema v12', mig.versionBefore === 12, String(mig.versionBefore));
-    record('migration: upgraded to schema v13', mig.versionAfter === 13, String(mig.versionAfter));
+    // The application schema has advanced past v13: P9 Batch D added `coverAssets`
+    // at v14 and Batch E added `portfolioProfiles` at v15. Opening a v12 database
+    // with the current `NovelStudioDb` therefore runs the FULL additive chain
+    // (v12 → v13 → v14 → v15) and must land on the current schema version. This
+    // still verifies a REAL upgrade (the version strictly advances past v12); we
+    // assert it equals the shipped schema version reported by the live DB, read
+    // from the driver (`currentSchemaVersion`) so the check stays correct as the
+    // schema evolves without weakening it (a failed/no-op migration would leave
+    // versionAfter=12 or mismatch the current version).
+    const currentSchemaVersion = out?.currentSchemaVersion;
+    record(
+      'migration: upgraded to current schema version (full additive chain from v12)',
+      mig.versionAfter > 12 && mig.versionAfter === currentSchemaVersion,
+      `after=${mig.versionAfter} current=${currentSchemaVersion}`,
+    );
     record('migration: no projectSnapshots store existed at v12', mig.hadSnapshotsTableAtV12 === false, String(mig.hadSnapshotsTableAtV12));
     record('migration: projectSnapshots store exists after upgrade', mig.hasSnapshotsStore === true, String(mig.hasSnapshotsStore));
     record('migration: new store starts empty after upgrade', mig.snapshotsEmptyAfterUpgrade === true, String(mig.snapshotsEmptyAfterUpgrade));

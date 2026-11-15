@@ -9,6 +9,7 @@ import {
   type AutosaveStore,
   type AutosaveTarget,
 } from './autosave-engine';
+import { registerEditor } from './editor-registry';
 
 /**
  * Service-backed store for the autosave engine.
@@ -236,6 +237,26 @@ export function useChapterEditor(
     },
     [projectId, chapterId, load],
   );
+
+  /*
+   * Register this editor with the tab-local restore coordinator (P9 B4-3) so a
+   * full-project restore can FLUSH pending autosave BEFORE the destructive write
+   * and REBIND/RELOAD the document AFTER it. Registration is additive — it does
+   * not change engine behaviour — and is removed on unmount / owner change.
+   */
+  useEffect(() => {
+    if (!projectId || !chapterId) return;
+    const handle = {
+      kind: 'chapter' as const,
+      projectId,
+      ownerId: chapterId,
+      flush: () => engineRef.current?.flush() ?? Promise.resolve(),
+      reload: async () => {
+        await load(projectId, chapterId);
+      },
+    };
+    return registerEditor(handle);
+  }, [projectId, chapterId, load]);
 
   // Warn before leaving with unsaved text (browser-level back/refresh guard).
   useEffect(() => {

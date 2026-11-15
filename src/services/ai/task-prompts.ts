@@ -143,6 +143,23 @@ export const TASK_PROMPTS: Record<AiTaskKind, TaskPromptDefinition> = {
         .join('\n\n'),
     }),
   },
+  blurb: {
+    task: 'blurb',
+    label: 'Blurb generator',
+    description: 'Draft a public back-cover blurb from the project premise.',
+    mode: 'chat',
+    build: ({ instruction, sourceText }) => ({
+      system:
+        'You are a professional back-cover copywriter. Write MARKETING blurbs that hook readers ' +
+        'without spoiling the ending. Return ONLY the blurb prose — no preamble, headings or quotes.',
+      user: [
+        instruction ? `Requirements:\n${instruction}` : 'Write a punchy back-cover blurb.',
+        sourceText ? `Project information:\n${sourceText}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+    }),
+  },
 };
 
 /** All task definitions in a stable display order. */

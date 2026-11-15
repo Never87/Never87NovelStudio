@@ -43,4 +43,12 @@ export { useExtraction } from './use-extraction';
 export type { UseExtractionResult, ExtractionListStatus } from './use-extraction';
 export { useIntegration } from './use-integration';
 export type { UseIntegrationResult, IntegrationQueueStatus } from './use-integration';
+export { usePublishingPresets } from './use-publishing-presets';
+export type { UsePublishingPresetsResult } from './use-publishing-presets';
+export { useCover } from './use-cover';
+export type { UseCoverResult } from './use-cover';
+export { useBlurb } from './use-blurb';
+export type { UseBlurbResult, BlurbRunStatus } from './use-blurb';
+export { usePortfolio } from './use-portfolio';
+export type { UsePortfolioResult } from './use-portfolio';
 

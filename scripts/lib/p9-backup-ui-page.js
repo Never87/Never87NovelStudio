@@ -79,12 +79,17 @@ async () => {
     }
     report.picker = { selectedA };
 
-    /* SCOPE COPY: the page must state single-project + later-restore + snapshot distinction */
+    /* SCOPE COPY: the page must state single-project scope, that restore is now
+       SUPPORTED (B4-3 — no longer a "later batch"), and the snapshot distinction. */
     {
       const body = document.body.innerText;
+      const restoreMentioned = /restor/i.test(body);
+      const laterBatchClaimed = /later batch/i.test(body);
       report.scope = {
-        mentionsSingleProject: /single-project/i.test(body),
-        mentionsRestoreLater: /restore/i.test(body) && /later batch/i.test(body),
+        mentionsSingleProject: /single[\s-]project/i.test(body),
+        // Restore is now a real, supported capability on this page; the page must
+        // NOT still claim restore is a "later batch".
+        mentionsRestoreSupported: restoreMentioned && !laterBatchClaimed,
         mentionsSnapshotsDifferent: /snapshot/i.test(body),
         mentions19: /19 project/i.test(body) || /19 collection/i.test(body),
       };

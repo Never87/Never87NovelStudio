@@ -39,6 +39,10 @@ export const ID_PREFIX = {
   extractionRecord: 'ext',
   // P9 — Version & Data Management (project snapshots).
   projectSnapshot: 'snap',
+  // P9 Batch D — Book Covers (stored cover-image resources).
+  coverAsset: 'cov',
+  // P9 Batch E — Portfolio display profiles.
+  portfolioProfile: 'pfp',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -181,4 +185,15 @@ export function createExtractionRecordId(): string {
 export function createProjectSnapshotId(): string {
   return createId(ID_PREFIX.projectSnapshot);
 }
+
+/** Convenience wrapper for stored cover-image asset ids (P9 Batch D — Book Covers). */
+export function createCoverAssetId(): string {
+  return createId(ID_PREFIX.coverAsset);
+}
+
+/** Convenience wrapper for portfolio display-profile ids (P9 Batch E — Portfolio). */
+export function createPortfolioProfileId(): string {
+  return createId(ID_PREFIX.portfolioProfile);
+}
+
 

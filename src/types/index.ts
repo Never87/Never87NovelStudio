@@ -170,3 +170,21 @@ export {
 export type { ProjectSnapshot, SnapshotReason, SnapshotCounts } from '@/schemas/snapshot';
 export { SNAPSHOT_REASONS, MAX_SNAPSHOT_LABEL_CHARS } from '@/schemas/snapshot';
 
+/* ------------------------- P9 Batch D — Book Covers ----------------------- */
+export type { CoverAsset, CoverImageMime } from '@/schemas/cover-asset';
+export {
+  COVER_IMAGE_MIME_TYPES,
+  MAX_COVER_BYTES,
+  MAX_COVER_DIMENSION,
+  MIN_COVER_DIMENSION,
+  COVER_ASSET_REF_PREFIX,
+  coverAssetRef,
+  parseCoverRef,
+} from '@/schemas/cover-asset';
+
+/* --------------------- P9 Batch E — Portfolio ---------------------------- */
+export type {
+  PortfolioProfile,
+  PortfolioEntry,
+  UpdatePortfolioProfileInput,
+} from '@/schemas/portfolio-profile';

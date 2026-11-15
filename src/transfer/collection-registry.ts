@@ -258,6 +258,27 @@ export const EXCLUDED_TABLES: ReadonlyArray<{ table: string; reason: string }> =
       'package must never contain snapshots (a snapshot must not nest snapshots), so ' +
       'they are excluded even though rows are project-scoped.',
   },
+  {
+    table: 'coverAssets',
+    reason:
+      'Cover images (P9 Batch D) are DEVICE-LOCAL binary resources and deliberately ' +
+      'NOT part of the JSON transfer payload: a Blob is not JSON-representable and ' +
+      'canonicalStringify would emit {} for it, corrupting the package. The project ' +
+      'keeps only the `cover: "asset:<id>"` reference string as a normal field; on ' +
+      'import the reference may point at an asset that does not exist on the target ' +
+      'device, and the UI degrades gracefully to a placeholder.',
+  },
+  {
+    table: 'portfolioProfiles',
+    reason:
+      'Portfolio display profiles (P9 Batch E) are DEVICE-LOCAL curated catalog ' +
+      'metadata (display title/pen-name/tagline/featured/order/links). They are NOT ' +
+      'project content: the project row remains the source of truth for ' +
+      'title/description/blurb/genre/status, and the Portfolio resolves live from it. ' +
+      'Excluding the profile from the transfer payload keeps a moved project from ' +
+      'carrying a stale catalog overlay; on the target device the project simply ' +
+      'appears with its own values until the author re-curates it.',
+  },
 ];
 
 /**

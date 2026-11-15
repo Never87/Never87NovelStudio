@@ -22,6 +22,8 @@ import { ContinuityRepository } from '@/repositories/continuity-repository';
 import { AnalysisRepository } from '@/repositories/analysis-repository';
 import { ImportRepository } from '@/repositories/import-repository';
 import { SnapshotRepository } from '@/repositories/snapshot-repository';
+import { CoverRepository } from '@/repositories/cover-repository';
+import { PortfolioProfileRepository } from '@/repositories/portfolio-profile-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -62,6 +64,11 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   title?: string;
   description?: string;
+  /**
+   * Public blurb / back-cover synopsis (P9 Batch D). `null` explicitly clears
+   * it; `undefined` leaves it unchanged. NEVER touches `description`.
+   */
+  blurb?: string | null;
   /** `null` explicitly clears the cover; `undefined` leaves it unchanged. */
   cover?: string | null;
   status?: ProjectStatus;
@@ -99,6 +106,8 @@ export class ProjectService {
   private readonly analysisRepository: AnalysisRepository;
   private readonly importRepository: ImportRepository;
   private readonly snapshotRepository: SnapshotRepository;
+  private readonly coverRepository: CoverRepository;
+  private readonly portfolioProfileRepository: PortfolioProfileRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -117,6 +126,9 @@ export class ProjectService {
     // Appended LAST with a default so every existing constructor call (and the
     // existing tests) keep working unchanged.
     snapshotRepository: SnapshotRepository = new SnapshotRepository(),
+    coverRepository: CoverRepository = new CoverRepository(),
+    // P9 Batch E: portfolio display profiles are project-owned display metadata.
+    portfolioProfileRepository: PortfolioProfileRepository = new PortfolioProfileRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -132,6 +144,8 @@ export class ProjectService {
     this.analysisRepository = analysisRepository;
     this.importRepository = importRepository;
     this.snapshotRepository = snapshotRepository;
+    this.coverRepository = coverRepository;
+    this.portfolioProfileRepository = portfolioProfileRepository;
   }
 
   /**
@@ -235,6 +249,11 @@ export class ProjectService {
       if (input.targetWordCount === null) delete merged.targetWordCount;
       else merged.targetWordCount = input.targetWordCount;
     }
+    // Blurb: separate from description; `null` clears it, `undefined` leaves it.
+    if (input.blurb !== undefined) {
+      if (input.blurb === null) delete merged.blurb;
+      else merged.blurb = input.blurb;
+    }
 
     try {
       return await this.repository.update(merged);
@@ -294,6 +313,13 @@ export class ProjectService {
       // established child-first, idempotent delete strategy (each repository
       // method is its own safe IndexedDB transaction).
       await this.snapshotRepository.deleteByProjectId(id);
+      // P9 Batch D: stored cover-image binaries are device-local resources that
+      // must not outlive their project (they are excluded from the JSON transfer
+      // payload, but INCLUDED in this deletion cascade).
+      await this.coverRepository.deleteByProjectId(id);
+      // P9 Batch E: the portfolio display profile is project-owned catalog
+      // metadata and must not outlive its project.
+      await this.portfolioProfileRepository.deleteByProjectId(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

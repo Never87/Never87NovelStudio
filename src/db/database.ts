@@ -11,12 +11,14 @@ import type {
   ContextConfig,
   ContextItem,
   ContinuityFact,
+  CoverAsset,
   DocumentSection,
   DraftVersion,
   ExtractionRecord,
   KnowledgeEntry,
   NarrativePlan,
   NovelProject,
+  PortfolioProfile,
   ProjectSnapshot,
   PromptTemplate,
   PromptTemplateVersion,
@@ -88,6 +90,10 @@ export class NovelStudioDb extends Dexie {
   extractionRecords!: Table<ExtractionRecord, string>;
   /** Immutable point-in-time captures of an entire project — many per project (P9). */
   projectSnapshots!: Table<ProjectSnapshot, string>;
+  /** Stored cover-image resources (binary Blobs) — many per project (P9 Batch D). */
+  coverAssets!: Table<CoverAsset, string>;
+  /** Portfolio display profiles — at most one per project (P9 Batch E). */
+  portfolioProfiles!: Table<PortfolioProfile, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -521,6 +527,97 @@ export class NovelStudioDb extends Dexie {
       documentSections: '&id, projectId, documentId, [documentId+order], parentId',
       extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
       projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+    });
+
+    // v14 — Book Covers: stored cover-image resources (P9 Batch D).
+    //   coverAssets: &id, projectId, createdAt
+    //                -> projectId lists a project's covers (every query is scoped
+    //                   by it) for the cover picker and the project-delete
+    //                   cascade; createdAt orders variants deterministically. The
+    //                   `data` Blob is NOT indexed (binary), and the list view
+    //                   reads only the denormalised metadata (mimeType/width/
+    //                   height/byteSize) so it never loads the bytes.
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v13 store is restated
+    // verbatim; the only change is the new empty `coverAssets` store. No existing
+    // row is added, removed or mutated by the migration. Cover binaries are
+    // DEVICE-LOCAL resources and are deliberately EXCLUDED from the JSON transfer
+    // payload (a Blob is not JSON-representable); the project's `cover` column
+    // still carries the `asset:<id>` reference as a normal string field.
+    this.version(14).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+      projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+      coverAssets: '&id, projectId, createdAt',
+    });
+
+    // v15 — Portfolio display profiles (P9 Batch E).
+    //   portfolioProfiles: &id, &projectId, updatedAt
+    //                     -> the UNIQUE projectId index enforces AT MOST ONE
+    //                        profile per project (mirrors world->project); a
+    //                        second insert fails loudly instead of duplicating.
+    //                        `updatedAt` orders/refreshes the catalog cheaply.
+    //                        The store is a THIN layer of curated DISPLAY
+    //                        overrides only (title/pen-name/tagline/category/
+    //                        featured/order/links) — it never duplicates the
+    //                        project's description/blurb/cover/genre/status;
+    //                        those are read LIVE from the project + cover modules.
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v14 store is restated
+    // verbatim; the only change is the new empty `portfolioProfiles` store. No
+    // existing row is added, removed or mutated by the migration. Like
+    // `coverAssets`, portfolio profiles are device-local display metadata and are
+    // deliberately EXCLUDED from the JSON transfer payload (see collection-registry).
+    this.version(15).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+      projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+      coverAssets: '&id, projectId, createdAt',
+      portfolioProfiles: '&id, &projectId, updatedAt',
     });
   }
 }

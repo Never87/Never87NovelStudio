@@ -543,14 +543,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Export Manager',
         icon: Package,
         path: '/publishing/export-manager',
-        description: 'Export your manuscript to TXT, DOCX, Markdown, EPUB, PDF and HTML.',
+        description: 'Export your whole manuscript to TXT, DOCX, Markdown, EPUB, PDF and HTML.',
         emptyTitle: 'No exports yet',
         emptyDescription:
           'Prepare a finished draft for readers or publishers in the format you need.',
         plannedFeatures: [
-          'Whole-book and per-chapter export',
+          'Whole-book export from one place',
           'TXT, DOCX, Markdown, EPUB, PDF and HTML',
-          'Layout preview before download',
+          'Preset-driven formatting and file names',
         ],
       },
       {
@@ -589,14 +589,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Book Covers',
         icon: Image,
         path: '/publishing/book-covers',
-        description: 'Store and manage cover images and cover variants for each project.',
+        description:
+          'Upload a full-resolution cover image (PNG, JPEG or WebP) and keep cover variants for each project.',
         emptyTitle: 'No cover uploaded',
         emptyDescription:
-          'Keep full-resolution cover art and alternate designs alongside the project that uses them.',
+          'A cover image is stored with the project and embedded into EPUB/PDF exports that support one.',
         plannedFeatures: [
-          'Upload full-resolution cover art',
-          'Multiple variants per project',
-          'Size and aspect-ratio checks for platforms',
+          'Upload PNG, JPEG or WebP cover art',
+          'Dimension, size and aspect-ratio checks',
+          'Stored per project and embedded in exports',
         ],
       },
       {

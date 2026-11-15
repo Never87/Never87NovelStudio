@@ -206,6 +206,7 @@ export const AI_TASK_KINDS = [
   'expand',
   'shorten',
   'suggestions',
+  'blurb',
 ] as const;
 
 export const AiTaskKindSchema = z.enum(AI_TASK_KINDS);

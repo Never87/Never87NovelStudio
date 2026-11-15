@@ -7,6 +7,7 @@ import {
   type AutosaveStore,
   type AutosaveTarget,
 } from './autosave-engine';
+import { registerEditor } from './editor-registry';
 
 /**
  * Service-backed store for the SCENE autosave engine.
@@ -207,6 +208,26 @@ export function useSceneEditor(
     },
     [projectId, sceneId, load],
   );
+
+  /*
+   * Register this editor with the tab-local restore coordinator (P9 B4-3) so a
+   * full-project restore can FLUSH pending autosave BEFORE the destructive write
+   * and REBIND/RELOAD the document AFTER it. Registration is additive — it does
+   * not change engine behaviour — and is removed on unmount / owner change.
+   */
+  useEffect(() => {
+    if (!projectId || !sceneId) return;
+    const handle = {
+      kind: 'scene' as const,
+      projectId,
+      ownerId: sceneId,
+      flush: () => engineRef.current?.flush() ?? Promise.resolve(),
+      reload: async () => {
+        await load(projectId, sceneId);
+      },
+    };
+    return registerEditor(handle);
+  }, [projectId, sceneId, load]);
 
   return useMemo(
     () => ({

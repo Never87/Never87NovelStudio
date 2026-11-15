@@ -2,8 +2,10 @@ import { ArrowRight, FolderKanban, TriangleAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState } from '@/components/ui';
 import type { NovelProject } from '@/types';
-import { PROJECT_STATUS_META, formatDate, projectInitials } from '@/modules/projects/project-meta';
+
+import { PROJECT_STATUS_META, formatDate } from '@/modules/projects/project-meta';
 import { formatRelative } from '@/utils/date';
+import { ProjectCoverThumb } from './ProjectCoverThumb';
 
 export interface RecentProjectsCardProps {
   /** Real projects. Already loaded once by the dashboard page. */
@@ -82,12 +84,7 @@ export function RecentProjectsCard({
                   to={`/projects/${project.id}`}
                   className="hover:bg-surface-muted/60 focus-visible:bg-surface-muted/60 flex items-center gap-3 px-4 py-2.5"
                 >
-                  <span
-                    aria-hidden
-                    className="bg-accent-soft text-accent-soft-text grid size-8 shrink-0 place-items-center rounded-md text-2xs font-semibold"
-                  >
-                    {projectInitials(project.title)}
-                  </span>
+                  <ProjectCoverThumb projectId={project.id} title={project.title} size={32} />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

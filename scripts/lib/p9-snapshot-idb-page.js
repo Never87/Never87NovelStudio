@@ -203,6 +203,11 @@ async () => {
   const db = new NovelStudioDb(DB_NAME);
   __setDbForTesting(db); // install BEFORE constructing any service
   await db.open();
+  // Report the live schema version so the harness can assert Phase A's upgrade
+  // landed on the CURRENT schema (the v13 assertion would otherwise be stale once
+  // Batch D/E added v14/v15). This is read AFTER a real open(), so it reflects the
+  // actual shipped `NovelStudioDb` version.
+  report.currentSchemaVersion = db.verno;
 
   const { SnapshotRepository } = await import('/src/repositories/snapshot-repository.ts');
   const { ProjectService } = await import('/src/services/project-service.ts');

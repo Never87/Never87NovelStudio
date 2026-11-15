@@ -174,6 +174,47 @@ const BackupRestorePage = lazy(async () => {
   return { default: mod.BackupRestorePage };
 });
 
+/** Publishing Presets & Chapter Export (P9 Batch B) — real pages. */
+const PublishingPresetsPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/PublishingPresetsPage');
+  return { default: mod.PublishingPresetsPage };
+});
+
+const ChapterExportPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/ChapterExportPage');
+  return { default: mod.ChapterExportPage };
+});
+
+/** Full-book Export Manager (P9 Batch C) — real page. */
+const ExportManagerPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/ExportManagerPage');
+  return { default: mod.ExportManagerPage };
+});
+
+/** Book Covers (P9 Batch D) — real page. */
+const BookCoversPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/BookCoversPage');
+  return { default: mod.BookCoversPage };
+});
+
+/** Blurb Generator (P9 Batch D) — real page. */
+const BlurbGeneratorPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/BlurbGeneratorPage');
+  return { default: mod.BlurbGeneratorPage };
+});
+
+/** Portfolio (P9 Batch E) — real page. */
+const PortfolioPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/PortfolioPage');
+  return { default: mod.PortfolioPage };
+});
+
+/** Royalty Calculator (P9 Batch E) — real page. */
+const RoyaltyCalculatorPage = lazy(async () => {
+  const mod = await import('@/modules/publishing/RoyaltyCalculatorPage');
+  return { default: mod.RoyaltyCalculatorPage };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -197,6 +238,14 @@ const REAL_PAGE_NAV_IDS = new Set([
   'version-history',
   'diff-viewer',
   'snapshots',
+  'backup',
+  'publishing-presets',
+  'chapter-export',
+  'export-manager',
+  'book-covers',
+  'blurb-generator',
+  'portfolio',
+  'royalty-calculator',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -250,6 +299,17 @@ export const router = createBrowserRouter(
         { path: 'data/snapshots', element: withRouteSuspense(<ProjectSnapshotsPage />) },
         // Backup & Restore (P9 Batch 4-1) — real page (single-project export).
         { path: 'data/backup-restore', element: withRouteSuspense(<BackupRestorePage />) },
+        // Publishing Presets, Chapter Export & Full-book Export (P9 Batch B/C).
+        { path: 'publishing/presets', element: withRouteSuspense(<PublishingPresetsPage />) },
+        { path: 'publishing/chapter-export', element: withRouteSuspense(<ChapterExportPage />) },
+        { path: 'publishing/export-manager', element: withRouteSuspense(<ExportManagerPage />) },
+        // Book Covers (P9 Batch D).
+        { path: 'publishing/book-covers', element: withRouteSuspense(<BookCoversPage />) },
+        // Blurb Generator (P9 Batch D).
+        { path: 'publishing/blurb-generator', element: withRouteSuspense(<BlurbGeneratorPage />) },
+        // Portfolio & Royalty Calculator (P9 Batch E).
+        { path: 'publishing/portfolio', element: withRouteSuspense(<PortfolioPage />) },
+        { path: 'publishing/royalty-calculator', element: withRouteSuspense(<RoyaltyCalculatorPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },

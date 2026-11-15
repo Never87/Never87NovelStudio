@@ -1,4 +1,4 @@
-
+﻿
 # P4 工作交接（AI_HANDOFF）
 
 > 本文件基于 **磁盘上的实际代码** 整理，不以聊天历史中的计划代替实际进度。
@@ -873,3 +873,38 @@ dismissed/resolved` 审查生命周期，且**从不改动**章节/场景/角色
 - `world-rule` 依赖英文模态句式与规则类分区/条目；自由散文规则可能漏检（保守优先，宁缺毋滥）。
 - AI 辅助分析仍**未实现**（`origin:'ai'` 仅保留），按任务要求显式排除于本批次之外。
 
+---
+
+## 16. P9（Publishing / Export / Data Management）交接指引 · Batch F
+
+> P9 的**用户使用说明与开发说明**独立成文，见 **`docs/P9_USER_AND_DEV_GUIDE.md`**：
+> 导出格式与限制、Preset、Book Covers / Blurb Generator / Portfolio / Royalty Calculator 用法、
+> Version History / Snapshots / Backup & Restore 的数据行为、设备本地资源与项目内容的边界、
+> 未实现项与已知限制、Batch F 回归统计与未运行测试清单。
+
+### 16.1 Batch F 关键结论（如实，不夸大）
+
+- **导航与路由一致**：P9 页面均已注册为真实路由并列入 `REAL_PAGE_NAV_IDS`（`src/routes/index.tsx`）。
+  **例外**：`project-io`（`/data/project-import-export`）仍是**占位页**，单项目 `.n87novel` 的导出/
+  导入/恢复由 **Backup & Restore** 页承担，独立的 project-io 专用页**未实现**。
+- **共享 preset（单一选中）**：Publishing Presets / Chapter Export / Export Manager 共用单例
+  `publishingPresetStore`（localStorage 键 `n87-publishing-presets`，版本化 envelope；损坏时回退默认
+  且不静默覆盖原字节）。
+- **数据链路**：
+  - Book Covers → Dashboard（`ProjectCoverThumb`）：**连通**。
+  - Book Covers → EPUB 导出：**连通**（`full-book-export-service` 经
+    `coverService.getCoverBytesForExport`；仅 PNG/JPEG 可嵌入，WebP/外部 URL/缺失资产均优雅降级）。
+  - Blurb → Portfolio：**连通**（`buildPortfolioEntry` 只读 `project.blurb`，绝不泄漏 `description`）。
+  - **Blurb → EPUB/PDF 导出：未实现**（导出管线不消费 `blurb`，简介不写入导出文件；已知缺口）。
+- **传输/备份排除正确**：`coverAssets`、`portfolioProfiles` 均在 `EXCLUDED_TABLES`；导出/校验/
+  ID 重映射/快照/恢复/备份预览**仅遍历 `TRANSFER_COLLECTIONS`（19 个）**，不破坏原项目数据。
+- **删除级联**：`ProjectService.deleteProject` 在删根行前清理 `coverAssets` + `portfolioProfiles`
+  + 其余项目-owned 集合（逐表幂等）。设备本地资源**未**进入项目 JSON 备份。
+- **回归（无 server）**：P9 全部纯逻辑/服务层套件通过——publishing 125、history 27、transfer 85、
+  snapshot 28、snapshot-service 46、snapshots-ui 43、backup 46、backup-preview 47、backup-restore 93、
+  backup-restore-coord 39、presets-logic 85、export 202、blurb 47、covers 45、epub-cover 28、royalty 46、
+  portfolio 34、portfolio-service 23；P1–P8 纯逻辑回归通过；`tsc -b --noEmit` exit 0；`npm run build` exit 0。
+- **本次未运行（环境阻塞，禁止启动 server，故不记为 PASS）**：所有 `*-ui-verify` / `*-idb-verify`
+  及浏览器 `p2a/p2b/p3/p4-verify`（实测尝试即 `chrome-error://…`，确认需 dev server）。清单见
+  `docs/P9_USER_AND_DEV_GUIDE.md` §9。
+- **不宣布 P9 全部完成**：Batch B/C/D/E 的浏览器 UI / IndexedDB 验证仍待在有 dev server 的环境补跑。
