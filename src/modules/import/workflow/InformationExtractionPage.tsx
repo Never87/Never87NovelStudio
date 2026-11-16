@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -17,8 +17,8 @@ import type { ExtractionKind } from '@/types';
 import type { GenerateAiExtractionsResult } from '@/services';
 import { cn } from '@/utils/cn';
 import { useAiConfig, useExtraction } from '@/hooks';
-import { ImportWorkflowShell } from './ImportWorkflowShell';
-import { useImportWorkflow } from './ImportWorkflowProvider';
+import { ImportWorkflowShell } from '../workflow/ImportWorkflowShell';
+import { useImportWorkflow } from '../workflow/ImportWorkflowProvider';
 import {
   AI_EXTRACTION_KINDS,
   DEFAULT_AI_SECTION_LIMIT,
@@ -27,7 +27,7 @@ import {
   quoteAppearsInSection,
   validateManualExtractionDraft,
   type ManualExtractionDraft,
-} from './import-workflow-stages';
+} from '../workflow/import-workflow-stages';
 
 /**
  * Information Extraction page (P8 Batch 6).
@@ -35,14 +35,14 @@ import {
  * Stage 4 of the pipeline. It produces REVIEW-PENDING `ExtractionRecord`
  * candidates for the selected document, two ways:
  *
- *   1. MANUAL —the user supplies a title, an optional summary/body and at least
+ *   1. MANUAL — the user supplies a title, an optional summary/body and at least
  *      one verbatim evidence quote from a confirmed section. `ExtractionService`
  *      resolves the quote against the stored raw text and rejects anything
  *      fabricated or ambiguous.
- *   2. AI —the user picks a model (from the P5 model registry) and asks the
+ *   2. AI — the user picks a model (from the P5 model registry) and asks the
  *      pipeline to propose candidates, grounded in confirmed sections.
  *
- * Extraction is BLOCKED until the document's structure is confirmed —that is
+ * Extraction is BLOCKED until the document's structure is confirmed — that is
  * enforced by the service and mirrored here by disabling the actions with the
  * reason shown. Absence of a confirmation must never be papered over by the UI.
  *
@@ -55,7 +55,7 @@ export function InformationExtractionPage() {
     <ImportWorkflowShell
       stage="extraction"
       title="Information Extraction"
-      description="Produce review-pending candidates from confirmed sections. Every candidate is grounded in a verbatim quote —nothing is written to project data."
+      description="Produce review-pending candidates from confirmed sections. Every candidate is grounded in a verbatim quote — nothing is written to project data."
     >
       <InformationExtractionContent />
     </ImportWorkflowShell>
@@ -169,7 +169,8 @@ function InformationExtractionContent() {
 
         {loadingSections ? (
           <p className="text-subtle text-2xs" role="status">
-            Loading sections—          </p>
+            Loading sections…
+          </p>
         ) : null}
         {sectionLoadError ? (
           <p className="text-danger text-2xs" role="alert">
@@ -269,7 +270,7 @@ function InformationExtractionContent() {
               evidence: [{ sectionId: draft.sectionId, quote: draft.quote }],
             });
             setMessage(
-              `Created pending candidate "${created.title}". It appears below and in the Review Center - nothing is applied to project data until it is integrated.`,
+              `Created pending candidate “${created.title}”. It appears below and in the Review Center — nothing is applied to project data until it is integrated.`,
             );
             return true;
           } catch (err) {
@@ -289,7 +290,8 @@ function InformationExtractionContent() {
 
         {extraction.loading && extraction.records.length === 0 ? (
           <p className="text-subtle mt-3 text-xs" role="status">
-            Loading candidates—          </p>
+            Loading candidates…
+          </p>
         ) : extraction.error && extraction.records.length === 0 ? (
           <p className="text-danger mt-3 text-xs" role="alert">
             {extraction.error instanceof Error ? extraction.error.message : 'Failed to load candidates.'}
@@ -338,11 +340,11 @@ function InformationExtractionContent() {
                   disabled={extraction.mutating}
                   icon={<Trash2 className="size-3" aria-hidden />}
                   onClick={async () => {
-                    if (!window.confirm(`Delete the candidate —{record.title}— This cannot be undone.`)) return;
+                    if (!window.confirm(`Delete the candidate “${record.title}”? This cannot be undone.`)) return;
                     setActionError(null);
                     try {
                       await extraction.deleteRecord(record.id);
-                      setMessage(`Deleted candidate —{record.title}—`);
+                      setMessage(`Deleted candidate “${record.title}”.`);
                     } catch (err) {
                       setActionError(err instanceof Error ? err.message : 'Delete failed.');
                     }
@@ -392,7 +394,7 @@ function AiExtractionCard({
 }: {
   disabled: boolean;
   busy: boolean;
-  /** Enabled models —`id` is the AiModel primary key, which is what `modelId` expects. */
+  /** Enabled models — `id` is the AiModel primary key, which is what `modelId` expects. */
   models: Array<{ id: string; displayName: string; modelId: string }>;
   configLoading: boolean;
   sectionCount: number;
@@ -613,7 +615,7 @@ function ManualExtractionCard({
             Manual candidate
           </h2>
           <p className="text-muted mt-0.5 text-xs">
-            Add a single candidate by hand. It must quote the text verbatim —the service rejects quotes it cannot
+            Add a single candidate by hand. It must quote the text verbatim — the service rejects quotes it cannot
             locate exactly once in the chosen section.
           </p>
         </div>
@@ -679,7 +681,7 @@ function ManualExtractionCard({
           aria-label="Evidence section"
           className="bg-surface border-line-strong text-ink h-8 rounded-md border px-2 text-xs disabled:opacity-60"
         >
-          <option value="">Select a confirmed section&hellip;</option>
+          <option value="">Select a confirmed section…</option>
           {sections.map((section) => (
             <option key={section.id} value={section.id}>
               {section.title} ({section.level})
@@ -695,7 +697,7 @@ function ManualExtractionCard({
           onChange={(event) => update('quote', event.target.value)}
           rows={3}
           disabled={disabled || busy || !draft.sectionId}
-          placeholder={chosenSection ? chosenSection.text.slice(0, 80) + '&hellip;' : 'Choose a section first'}
+          placeholder={chosenSection ? chosenSection.text.slice(0, 80) + '…' : 'Choose a section first'}
           aria-label="Evidence quote"
           className="bg-surface border-line-strong text-ink w-full rounded-md border px-2 py-1.5 font-mono text-2xs disabled:opacity-60"
         />
