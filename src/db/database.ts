@@ -27,6 +27,8 @@ import type {
   SourceDocument,
   Volume,
   World,
+  WritingActivity,
+  WritingGoal,
 } from '@/types';
 
 /**
@@ -94,6 +96,10 @@ export class NovelStudioDb extends Dexie {
   coverAssets!: Table<CoverAsset, string>;
   /** Portfolio display profiles — at most one per project (P9 Batch E). */
   portfolioProfiles!: Table<PortfolioProfile, string>;
+  /** Workspace/per-project writing goals — singleton 'global' today (Dashboard fix). */
+  writingGoals!: Table<WritingGoal, string>;
+  /** Per-project, per-day writing-activity rollups (Dashboard fix). */
+  writingActivity!: Table<WritingActivity, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -618,6 +624,61 @@ export class NovelStudioDb extends Dexie {
       projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
       coverAssets: '&id, projectId, createdAt',
       portfolioProfiles: '&id, &projectId, updatedAt',
+    });
+
+    // v16 — Dashboard: writing goals & writing-activity ledger (Round-1 fix).
+    //   writingGoals:    &id, scope
+    //                    -> the workspace-wide goal is a singleton row with the
+    //                       fixed id 'global' (see schemas/writing-goal.ts); the
+    //                       `scope` index leaves room for per-project goals
+    //                       later WITHOUT another migration-shape change.
+    //   writingActivity: &id, projectId, [projectId+dateKey], dateKey
+    //                    -> one rollup row per (project, local calendar day).
+    //                       projectId lists a project's daily output; the
+    //                       compound [projectId+dateKey] backs the idempotent
+    //                       upsert (one row per project per day); the plain
+    //                       dateKey index lets the workspace streak / chart
+    //                       scan a date range across all projects.
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v15 store is restated
+    // verbatim; the only changes are the two new empty stores. No existing row
+    // is added, removed or mutated by the migration. The activity ledger starts
+    // EMPTY on upgrade — historical daily output cannot be reconstructed from
+    // the pre-existing draft/version data, so the UI shows an honest empty
+    // state until real writing is recorded going forward. Both tables are
+    // derived/aggregate metadata and are EXCLUDED from the JSON transfer
+    // payload (they are recomputed from live writing), but writingActivity is
+    // INCLUDED in the project-delete cascade so no rows outlive their project.
+    this.version(16).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+      projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+      coverAssets: '&id, projectId, createdAt',
+      portfolioProfiles: '&id, &projectId, updatedAt',
+      writingGoals: '&id, scope',
+      writingActivity: '&id, projectId, [projectId+dateKey], dateKey',
     });
   }
 }

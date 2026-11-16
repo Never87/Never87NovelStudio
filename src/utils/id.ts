@@ -43,6 +43,9 @@ export const ID_PREFIX = {
   coverAsset: 'cov',
   // P9 Batch E — Portfolio display profiles.
   portfolioProfile: 'pfp',
+  // Dashboard fix — writing goals & per-day writing activity.
+  writingGoal: 'goal',
+  writingActivity: 'act',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -194,6 +197,16 @@ export function createCoverAssetId(): string {
 /** Convenience wrapper for portfolio display-profile ids (P9 Batch E — Portfolio). */
 export function createPortfolioProfileId(): string {
   return createId(ID_PREFIX.portfolioProfile);
+}
+
+/** Convenience wrapper for writing-goal ids (Dashboard fix). */
+export function createWritingGoalId(): string {
+  return createId(ID_PREFIX.writingGoal);
+}
+
+/** Convenience wrapper for writing-activity rollup ids (Dashboard fix). */
+export function createWritingActivityId(): string {
+  return createId(ID_PREFIX.writingActivity);
 }
 
 

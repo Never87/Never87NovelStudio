@@ -908,3 +908,231 @@ dismissed/resolved` 审查生命周期，且**从不改动**章节/场景/角色
   及浏览器 `p2a/p2b/p3/p4-verify`（实测尝试即 `chrome-error://…`，确认需 dev server）。清单见
   `docs/P9_USER_AND_DEV_GUIDE.md` §9。
 - **不宣布 P9 全部完成**：Batch B/C/D/E 的浏览器 UI / IndexedDB 验证仍待在有 dev server 的环境补跑。
+
+---
+
+## 17. Round 1 · 原始规划遗漏修复（Dashboard 虚假数据 + 占位页审计）
+
+> 审计矩阵见 **`docs/ROUND1_AUDIT_MATRIX.md`**；接管/进度记录见 **`docs/REPAIR_PROGRESS.md`**。
+> 本节只记录**实测结论**，不夸大。
+
+### 17.1 发现与修复
+
+- **Dashboard 六项虚假数据（关键遗漏）已全部改为真实数据**：Words Written / Writing Streak /
+  Completed Chapters / Continue Writing / Writing Goal / Recent Activity。`demo-data.ts` 与
+  `DemoDataBanner.tsx` 已彻底删除（全仓库 `grep demo-data ≈ 0`）。
+- 新增持久化（纯增量 Dexie `version(16)`，旧表逐字 restate，无数据破坏）：
+  `writingGoals`（单例 `global`）、`writingActivity`（每项目每天净产出汇总）。
+- 新增业务层：`WritingGoalService`、`WritingStatsService`（含 `recordWordDelta` 唯一写入路径）、
+  `modules/dashboard/stats.ts` 纯聚合函数、`useDashboardStats` / `useWritingGoal`。
+- `ManuscriptService` 保存真实改动章节/场景时通过可注入 `ActivityRecorder` 记录净词数增量到台账；
+  记录失败被吞掉，**绝不影响保存**。
+- **Continue Writing 深链**：`?tab=writing&chapter=<id>`，`ProjectDetailPage` 解析参数、
+  `WritingPanel` 打开指定章节。
+
+### 17.2 本次修复的真实缺陷（非测试写错）
+
+- `pickContinueTarget` 原实现依赖 `ProjectRepository.getAll()` 的「按 `project.updatedAt` 排序」，
+  但**编辑章节稿件不会更新项目行**，导致「继续写作」指向最近**创建**而非最近**编辑**的项目。
+  已改为跨全部项目按「各自最近一次写作活动时间（draft.updatedAt，回退 project.updatedAt）」择优。
+  该缺陷由浏览器端到端测试捕获后修复（见 §17.3 的 `continue: follows the newest edit`）。
+
+### 17.3 验证（本次实跑，非引用）
+
+- `npx tsc -b --noEmit` → **exit 0**。
+- `npm run verify:dashboard`（纯单元，fake 仓库）→ **49/49 PASS**。
+- `npm run verify:dashboard:ui`（真实 Chrome + IndexedDB + dev server）→ **46/46 PASS**，覆盖：
+  空状态诚实 0、真实词数、真实活动时间戳、streak、目标持久化、完成章计数、Continue 跟随最新编辑、
+  整页刷新后持久化、项目隔离（删 B 保 A）、Dashboard DOM 显示真实词数且**无 demo/coming-soon 标语**、
+  无未捕获异常、**深链打开精确章节**（显示目标章节正文而非首章）。
+- `npm run build` → **built in ~983ms，exit 0**（仅既有 chunk 体积告警，与本次改动无关）。
+
+### 17.4 审计结论摘要（实际审计 22 个页面，详见矩阵文档）
+
+> **数量口径**：任务标题所称「17 个 Placeholder 页面」，经源码核对实为 **16 个占位路由**
+> （`ALL_NAV_ITEMS`(45) − `REAL_PAGE_NAV_IDS`(29) = 16），第 17 条为导航**分组标题**（非页面）。
+> 故占位类页面 **16 项** + Dashboard **6 项** = **22 项**；不存在第 23 个页面项，不凑数。
+
+- **IMPLEMENTED**：6（Dashboard 六项）。
+- **UI_DISCONNECTED**：6 —— World / Characters / Narrative / Outline / Scene Builder / Story Editor
+  的**底层实现完整**（schema/repo/service/hook/panel），但仓库导航路由仍渲染 `ModulePlaceholder`；
+  真实入口只在「项目详情」的标签页内。
+- **PARTIAL**：1 —— Import / Export Project：能力由 Backup & Restore 承担，专用路由页未做。
+- **PLACEHOLDER**：9 —— Writing Statistics、Writing Goals、Timeline、Story Idea Generator、
+  AI Model Playground、Style Analyzer、General Settings、Editor Settings、Help & About（底层缺页/缺检测器/缺任务）。
+- **DATA_FAKE**：0（已清零）。
+- **合计**：9（PLACEHOLDER）+ 6（UI_DISCONNECTED）+ 1（PARTIAL）+ 6（Dashboard IMPLEMENTED）= **22**。
+- **说明**：`workspace/creation/import-analysis/ai-toolbox/publishing/version-data/system` 为导航**分组**，非页面（即「第 17 条」）。
+
+### 17.5 留下的「诚实缺口」（未实现、不臆造）
+
+- Outline 的 `linkingData`（plot beat ↔ chapter）为单向只读展示，未做双向编辑；
+- 上述所有占位页（Timeline / Style Analyzer / Model Playground / Idea Generator / Writing
+  Statistics / Writing Goals / World / Characters / Narrative / Outline / Scene Builder /
+  Story Editor / General/Editor Settings / Help / Project I/O）已在本轮收尾实现，见 **§18**；
+  Outline 双向编辑仍为唯一已知功能缺口。
+
+---
+
+## 18. Round 1 收尾 · 占位页全部实现（Novel Creation / AI Toolbox / System / Project I/O）
+
+> 本节记录把 §17.4 中 9 个 PLACEHOLDER + 6 个 UI_DISCONNECTED + 1 个 PARTIAL 全部转为
+> IMPLEMENTED 的工作。审计矩阵 `docs/ROUND1_AUDIT_MATRIX.md` 已同步更新为「22/22 IMPLEMENTED」。
+
+### 18.1 已实现页面（全部真实 Hook/Service/持久化，无 mock）
+
+- **Novel Creation 独立页**（`src/modules/creation/CreationPages.tsx` + `ProjectScopedPage`）：
+  World / Characters / Narrative / Outline / Scene Builder / Story Editor 六页，复用项目详情
+  已存在的同一批 Panel（`WorldPanel` / `CharactersPanel` / `NarrativePanel` / `OutlinePanel` /
+  `ScenesProsePanel` / `WritingPanel`），通过 `ProjectScopedPage` 提供项目选择器，导航路由不再占位。
+- **Timeline**（`creation/TimelinePage.tsx`）：由 `useOutline` + `useContinuity` 按实时大纲顺序
+  派生出按时间排列的事件视图（不再占位）。
+- **Writing Statistics**（`modules/stats/StatisticsPage.tsx`）：`useWorkspaceStats` 驱动，
+  日/周/月输出、按项目拆分，真实数据。
+- **Writing Goals**（`modules/goals/GoalsPage.tsx`）：`useWritingGoal` / `WritingGoalService`，
+  与 Dashboard 共享同一持久目标。
+- **AI Toolbox**（`modules/ai-toolbox/`）：
+  - `IdeaGeneratorPage`：`useAiConfig` + `useAiAssistance`，用户输入题材/主题 → 真实 AI 管线生成。
+  - `ModelPlaygroundPage`：对已配置模型直接运行 prompt，真实 AI 管线。
+  - `StyleAnalyzerPage` + `style-analysis.ts`：**确定性本地分析**（句长/词频/对话比例等）
+    为真实核心，`analyzeStyle` / `topWords` 纯函数，可选 AI 深化。
+- **System**（`modules/system/`）：
+  - `GeneralSettingsPage`：`setThemeMode`/`useThemeMode`（持久化 `n87-theme`）+ `useUiStore`
+    侧栏默认（`n87-ui`），均为真实持久化。
+  - `EditorSettingsPage`：主题切换（作用于编辑器）+ 如实展示自动保存保证（800ms 防抖 / 5s 上限，
+    为 `AutosaveEngine` 的**真实行为**，不伪造不存在的可配置项）。
+  - `HelpPage`：产品说明 / 数据与隐私 / 真实快捷入口。
+- **Import / Export Project**（`modules/data/ProjectIOPage.tsx`）：**工作区级**导出
+  （`TransferService.exportWorkspace` + `serialize` → `.n87novel` 下载）+ 单项目备份校验预览
+  （`backupPreviewService`，只读）。恢复本身不在此重复，指向 Backup & Restore（唯一、安全、
+  带快照的写恢复路径），避免出现第二条恢复实现。
+
+### 18.2 路由接入（`src/routes/index.tsx`）
+
+- 新增 lazy import + 真实路由：`/novel/world-building|characters|narrative-planning|outline|
+  scene-builder|story-editor|timeline`、`/ai/idea-generator|model-playground|style-analyzer`、
+  `/settings/general|editor|help`、`/data/project-import-export`、`/statistics`、`/goals`。
+- `REAL_PAGE_NAV_IDS` 已包含上述全部 nav id，`moduleRoutes`（`createModulePage` 占位）实际产出为空，
+  即 **45 个 nav item 全部渲染真实页面，无任何 `ModulePlaceholder` 回落**。
+- `DashboardPage` 的 Quick Access 磁贴改为真实 `Link`（不再 disabled 占位）。
+
+### 18.3 验证（本次实跑）
+
+- `npx tsc -b --noEmit` → **exit 0**。
+- `npm run build` → **exit 0**（993ms；既有 chunk 体积告警与本次无关）。
+- 注：本轮未新增 `*-ui-verify`（无 dev server 环境），页面逻辑均基于既有、已测试的
+  Service/Hook（Dashboard 统计、传输、AI 管线、持久化 store）组合而成，未引入未测试的新数据路径。
+  逐页真实交互的浏览器端验证仍建议在有 dev server 时补跑（沿用各模块既有 UI 验证脚本口径）。
+
+### 18.4 已知限制（如实）
+
+- Project I/O 的「导入」原先只做**校验预览**；**已在本轮修复**为「导入为新项目」（走唯一
+  `projectRestoreService.restoreAsNewProject` 安全写路径），见 **§19**。多项目工作区包仍为
+  **导出/存档**用途，未提供「整体导入为新工作区」的写路径（不做臆造的恢复闭环）。
+- Idea Generator / Model Playground 依赖用户已配置的 provider/model；未配置时页面如实提示前往
+  API Settings，不伪造输出。
+- Editor Settings 的自动保存参数为既有 `AutosaveEngine` 的固定行为，页面如实说明而非提供假开关。
+
+
+---
+
+## 19. Round 1 收尾补强 · Outline 双向编辑 + Project I/O 真实导入
+
+> 本节修复 §17.5 / §18.4 遗留的两个功能缺口，均基于既有架构、单一真源、单一写路径，未新增表，
+> 未引入第二份恢复实现。所有断言均实测。
+
+### 19.1 Outline ↔ PlotBeat 双向编辑（补齐「单向只读」缺口）
+
+- **单一真源不变**：关系仍只存在 `Chapter.plotBeatId`。叙事侧「某节拍由哪些章节实现」是**派生视图**，
+  **不写回节拍**，因此不存在两份数据、不存在更新环。
+- **新增只读派生 + 定向清理（`OutlineService`）**：
+  - `getBeatChapterLinks(projectId): Map<beatId, Chapter[]>` —— 由章节列表按 `plotBeatId` 分组派生。
+  - `unlinkRemovedBeats(projectId, removedBeatIds): Promise<number>` —— 仅清除指向被删节拍的
+    `plotBeatId`，**逐字段保留其余内容**（title/summary/tags/goal… 原样），**幂等**、空集为 no-op。
+    这是「节拍被删后章节不再悬挂引用」的完整性保护。
+- **反向编辑 UI（NarrativePanel）**：每个节拍展示「实现它的章节」列表，可 **Link / Unlink**；写操作
+  一律经 `outlineService.updateChapter({ plotBeatId })`（与大纲页同一写路径与校验，`null` 清除，
+  非空须存在于叙事规划）。新增 hook `useBeatLinks`（`src/hooks/use-beat-links.ts`）封装派生视图 +
+  反向编辑 + 清理，已从 `@/hooks` 导出。
+- **删除即清理**：叙事面板更新计划时，对比旧/新节拍 id 计算被删集合，调用 `unlinkRemovedBeats`；
+  删除整份计划时，对该计划全部节拍 id 清理后删除。二者均先清理再落库，避免悬空引用。
+- 大纲侧（章节表单选择节拍）本已存在，至此 **节拍 → 章节** 与 **章节 → 节拍** 双向可达、同源。
+
+### 19.2 Project I/O 真实导入（补齐「只能预览、不能导入」缺口）
+
+- 页面 `ProjectIOPage` 的「Import a project backup」现在**可真正导入为新项目**：
+  选择单项目 `.n87novel` → 校验 + 预览（只读）→ **Import as new project**。
+- **唯一写路径**：导入调用 `backupPreviewService.parseBackupEntry(...)` 重新校验后，交给
+  `projectRestoreService.restoreAsNewProject(entry)` —— 与 Backup & Restore 完全相同的
+  **原子、id 重映射、失败回滚**恢复路径，**不新增第二套恢复实现**。
+- **安全要点**：在 **确认导入时重新解析**（保留原始文本 `previewText`），因此「陈旧预览」不会
+  授权一次写；导入**总是生成全新 project id**，绝不覆盖已有项目；成功后刷新项目列表并显示
+  「已导入为新项目 · Open it」横幅。失败经 `ProjectRestoreError` 如实上报，**不改动任何数据**。
+- 工作区级导出仍为**存档**用途；整包「导入为新工作区」仍未提供（诚实留白，未臆造）。
+
+### 19.3 验证（本次实跑）
+
+- `npx tsc -b --noEmit` → **exit 0**。
+- 新增纯逻辑测试 `scripts/p9-outline-beat-link-unit.cjs`（`npm run verify:outline:beatlink`）→
+  **21 / 21 PASS**：派生分组正确、未链接不出现；`unlinkRemovedBeats` 只清 `plotBeatId` 且保留其余字段、
+  幂等、空集 no-op；反向 assign/unassign 生效且反向视图同步；指向不存在节拍被拒绝；删除+清理后
+  无悬挂引用。
+- 回归（纯逻辑/服务层）：`verify:backup:restore` **93 / 93**、`verify:backup:preview` **47 / 47** 通过。
+- 本机 `*-ui-verify` / `p2b` / `p3` 等浏览器脚本因**无 dev server**（`chrome-error://`）未运行，
+  与本次改动无关（详见 §16 环境说明）。
+
+### 19.4 已知限制（如实）
+
+- Outline 双向编辑中，一个章节只指向一个节拍；在节拍处 Link 只提供「未链接」的章节，
+  已链接他处的章节需先在大纲页解除（避免隐式移动，保持可预期）。
+- 工作区整包导入为新工作区未实现（未臆造恢复闭环）。
+
+
+
+---
+
+## 20. Round 1 最终浏览器验收（实测结论）
+
+> 本章为最终验收记录，业务代码未再改动。所有数字为**本次实跑**。
+> 环境：Windows，Chrome 默认路径，Node v24；临时 dev server 由本次**自行启动**于
+> `http://127.0.0.1:5177`（启动时端口 free，确认非用户服务），测试后**按 PID 精确停止**并确认
+> 端口释放。浏览器脚本各自持有并清理自己的临时 Chrome 配置。
+
+### 20.1 新增验收脚本（仅测试工具）
+
+- `scripts/p9-round1-final-browser-verify.cjs`（`npm run verify:round1:browser`）——真 Chrome + 真
+  IndexedDB，直连 UI 相同的服务（`outlineService` / `backupService` / `backupPreviewService` /
+  `projectRestoreService` / `writingStatsService`），针对本轮三项补强的**端到端**验收。
+
+### 20.2 验收结果
+
+| 验收项 | 结果 |
+| --- | --- |
+| Outline ↔ PlotBeat 双向关联（章节↔节拍，派生视图） | ✅ 通过（totalLinked=2） |
+| 取消关联（清 `plotBeatId` + 派生视图即时移除） | ✅ 通过 |
+| 删除 Beat 后无悬空引用（`unlinkRemovedBeats`） | ✅ 通过（unlinked=1，chapter.plotBeatId=undefined） |
+| `.n87novel` 单项目导入为新项目（走 `restoreAsNewProject`） | ✅ 通过（项目 +1，新 id） |
+| 刷新后导入数据仍在 | ✅ 通过（reload 后导入项目 + 源项目均在，各 3 章） |
+| 原项目不被覆盖 | ✅ 通过 |
+| 导入失败不留半成品（畸形 JSON / 篡改完整性） | ✅ 通过（项目数不变） |
+| 16 个 Round-1 路由正常打开、无占位、无异常 | ✅ 通过（16/16） |
+| Dashboard 六项数据真实（服务六字段 + DOM 六卡片，无 demo） | ✅ 通过 |
+| 全程无未捕获页面异常 | ✅ 通过 |
+
+`verify:round1:browser` 实测 **52 / 52 PASS**。
+
+### 20.3 回归（既有脚本，本次实跑，需 dev server）
+
+- `verify:dashboard:ui` → **46 / 46 PASS**
+- `verify:backup:restore:ui` → **43 / 43 PASS**
+
+（其余 `*-ui` / `*-idb` 套件本轮未逐一运行；§16 已说明其需 dev server。本轮针对新增能力的验收由
+`verify:round1:browser` 覆盖，未以未运行者充数。）
+
+### 20.4 结论
+
+本轮要求的所有浏览器验收项在真实浏览器 + 真实 IndexedDB 下**全部通过**：双向 Beat 关联/取消/
+删除无悬空、单项目导入为新项目且刷新持久、原项目不被覆盖、导入失败无半成品、16 路由正常、
+Dashboard 六项真实、无未捕获异常。**未修改任何业务代码。** 过程仅新增/调整测试脚本并更新文档，
+未执行任何 Git 危险操作，未做无关重构。
+

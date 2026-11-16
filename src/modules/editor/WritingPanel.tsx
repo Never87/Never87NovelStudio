@@ -27,6 +27,14 @@ import { ImportExportDialog } from './ImportExportDialog';
 
 export interface WritingPanelProps {
   projectId: string;
+  /**
+   * Optional chapter to open first (deep-link support). When provided and the
+   * chapter exists in this project's outline, the editor opens it instead of the
+   * default first chapter. Used by the Dashboard's "Continue Writing" action so
+   * the author lands on the exact chapter they last edited. Ignored (falls back
+   * to the first chapter) when the id is not present in the outline.
+   */
+  initialChapterId?: string | null;
 }
 
 /**
@@ -38,13 +46,26 @@ export interface WritingPanelProps {
  * The editor never owns persistence — every keystroke goes through
  * `useChapterEditor`, which debounces, serialises and revision-checks the save.
  */
-export function WritingPanel({ projectId }: WritingPanelProps) {
+export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps) {
   const { outline, status: outlineStatus, loading } = useOutline(projectId);
-  const [chapterId, setChapterId] = useState<string | null>(null);
+  // Seed with the requested deep-link chapter (if any); the effect below falls
+  // back to the first chapter only when nothing is selected yet.
+  const [chapterId, setChapterId] = useState<string | null>(initialChapterId ?? null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
 
   const chapters = outline.flatMap((entry) => entry.chapters);
+
+  // If a deep-link chapter was requested, open it once the outline has loaded
+  // and only if it actually belongs to this project. Runs before the
+  // "open first chapter" default so the requested chapter wins.
+  useEffect(() => {
+    if (!initialChapterId) return;
+    if (chapters.length === 0) return;
+    if (chapters.some((chapter) => chapter.id === initialChapterId)) {
+      setChapterId((current) => (current === initialChapterId ? current : initialChapterId));
+    }
+  }, [initialChapterId, chapters]);
 
   // Open the first chapter by default so the tab is never a dead end.
   useEffect(() => {

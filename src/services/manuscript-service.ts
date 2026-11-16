@@ -98,6 +98,18 @@ export interface CreateDraftOptions {
 }
 
 /**
+ * Side-effect hook invoked after a draft save that ACTUALLY changed the prose.
+ *
+ * Receives the owning `projectId` and the NET word-count delta (new minus old,
+ * which may be negative when text was deleted). The Dashboard's writing-activity
+ * ledger is recorded through this hook (see `WritingStatsService`), keeping the
+ * manuscript layer free of a hard dependency on the statistics module and
+ * trivially testable with a spy. A no-op default means every existing caller and
+ * test is unaffected.
+ */
+export type ActivityRecorder = (projectId: string, wordDelta: number) => Promise<void>;
+
+/**
  * Business layer for manuscript prose (writing editor, P4).
  *
  * Responsibilities:
@@ -114,15 +126,19 @@ export class ManuscriptService {
   private readonly repository: ManuscriptRepository;
   private readonly outlineRepository: OutlineRepository;
   private readonly sceneRepository: SceneRepository;
+  /** Optional side-effect hook; no-op by default so existing behaviour is unchanged. */
+  private readonly recordActivity: ActivityRecorder;
 
   constructor(
     repository: ManuscriptRepository = new ManuscriptRepository(),
     outlineRepository: OutlineRepository = new OutlineRepository(),
     sceneRepository: SceneRepository = new SceneRepository(),
+    recordActivity: ActivityRecorder = async () => {},
   ) {
     this.repository = repository;
     this.outlineRepository = outlineRepository;
     this.sceneRepository = sceneRepository;
+    this.recordActivity = recordActivity;
   }
 
   /* --------------------------- Chapter drafts ---------------------------- */
@@ -202,6 +218,16 @@ export class ManuscriptService {
       ? await this.repository.putChapterDraft(next)
       : await this.repository.createChapterDraft(next);
 
+    // Record the NET word delta for the Dashboard activity ledger. Only a
+    // genuine content change contributes (an idempotent re-save of identical
+    // text has changed === false and therefore a zero delta). The recorder
+    // never throws into the save path: a statistics failure must not break
+    // saving the author's prose.
+    if (changed) {
+      const delta = next.wordCount - base.wordCount;
+      await this.recordActivitySafely(projectId, delta);
+    }
+
     return { draft: saved, changed, snapshot };
   }
 
@@ -265,6 +291,12 @@ export class ManuscriptService {
     const saved = current
       ? await this.repository.putSceneDraft(next)
       : await this.repository.createSceneDraft(next);
+
+    // Same activity-ledger contract as `saveChapterDraft`.
+    if (changed) {
+      const delta = next.wordCount - base.wordCount;
+      await this.recordActivitySafely(projectId, delta);
+    }
 
     return { draft: saved, changed, snapshot };
   }
@@ -494,6 +526,21 @@ export class ManuscriptService {
     const currentRevision = current?.revision ?? 0;
     if (currentRevision !== expected) {
       throw new DraftConflictError(current?.id ?? '<new>', expected, currentRevision);
+    }
+  }
+
+  /**
+   * Invokes the activity recorder without letting a statistics failure break a
+   * successful prose save. The author's text is already persisted by the time
+   * this runs; a ledger write failing is a degraded-statistics condition, not a
+   * failed save.
+   */
+  private async recordActivitySafely(projectId: string, wordDelta: number): Promise<void> {
+    try {
+      await this.recordActivity(projectId, wordDelta);
+    } catch {
+      // Swallowed by design — see method doc. Statistics are derived, not
+      // authoritative; the prose write already succeeded.
     }
   }
 

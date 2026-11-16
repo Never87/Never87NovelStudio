@@ -18,6 +18,7 @@
     "verify:narrative:ui": "node scripts/p2b-ui-verify.cjs",
     "verify:outline": "node scripts/p3-verify.cjs",
     "verify:outline:ui": "node scripts/p3-ui-verify.cjs",
+    "verify:outline:beatlink": "node scripts/p9-outline-beat-link-unit.cjs",
     "verify:editor": "node scripts/p4-autosave-unit.cjs",
     "verify:markdown": "node scripts/p4-markdown-unit.cjs",
     "verify:writing": "node scripts/p4-verify.cjs",
@@ -75,6 +76,9 @@
     "verify:portfolio": "node scripts/p9e-portfolio-unit.cjs",
     "verify:portfolio:service": "node scripts/p9e-portfolio-service-unit.cjs",
     "verify:portfolio:ui": "node scripts/p9e-idb-ui-verify.cjs",
+    "verify:dashboard": "node scripts/p9f-dashboard-stats-unit.cjs",
+    "verify:dashboard:ui": "node scripts/p9f-dashboard-ui-verify.cjs",
+    "verify:round1:browser": "node scripts/p9-round1-final-browser-verify.cjs",
     "verify:blurb:idb": "node scripts/p9d-blurb-idb-verify.cjs",
     "verify:blurb:ui": "node scripts/p9d-blurb-ui-verify.cjs"
   },

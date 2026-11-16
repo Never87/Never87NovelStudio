@@ -356,6 +356,58 @@ export class OutlineService {
     }
   }
 
+
+  /**
+   * Reverse view of the chapter↔beat link: which chapters implement each beat.
+   *
+   * The relationship has a SINGLE source of truth — `Chapter.plotBeatId` — so
+   * this map is DERIVED, never stored on the beat. A beat with no implementing
+   * chapter simply does not appear. This is what lets the narrative side show
+   * (and edit) chapter links without introducing a second, reconcilable copy.
+   */
+  async getBeatChapterLinks(projectId: string): Promise<Map<string, Chapter[]>> {
+    const chapters = await this.listProjectChapters(projectId);
+    const byBeat = new Map<string, Chapter[]>();
+    for (const chapter of chapters) {
+      if (!chapter.plotBeatId) continue;
+      const list = byBeat.get(chapter.plotBeatId);
+      if (list) list.push(chapter);
+      else byBeat.set(chapter.plotBeatId, [chapter]);
+    }
+    return byBeat;
+  }
+
+  /**
+   * Clears the beat link on any chapter whose `plotBeatId` is in `removedBeatIds`.
+   *
+   * Integrity guard for beat REMOVAL: a chapter must never point at a beat that
+   * no longer exists. This is a TARGETED partial update — only `plotBeatId` is
+   * cleared; every other field is preserved verbatim, so it never clobbers a
+   * concurrent edit to the chapter's title/summary/etc. Idempotent; a no-op for
+   * an empty set. Returns how many chapters were unlinked.
+   */
+  async unlinkRemovedBeats(projectId: string, removedBeatIds: Iterable<string>): Promise<number> {
+    const removed = new Set(removedBeatIds);
+    if (removed.size === 0) return 0;
+    try {
+      const chapters = await this.listProjectChapters(projectId);
+      const affected = chapters.filter(
+        (chapter) => chapter.plotBeatId !== undefined && removed.has(chapter.plotBeatId),
+      );
+      if (affected.length === 0) return 0;
+      const timestamp = now();
+      const cleared = affected.map((chapter) => {
+        const next: Chapter = { ...chapter, updatedAt: timestamp };
+        delete next.plotBeatId;
+        return next;
+      });
+      await this.repository.putChapters(cleared);
+      return cleared.length;
+    } catch (error) {
+      throw this.wrap(error, `Failed to clear removed plot-beat links for project "${projectId}"`);
+    }
+  }
+
   /** Every chapter of a project (ordered by volume, then order). */
   async listProjectChapters(projectId: string): Promise<Chapter[]> {
     try {

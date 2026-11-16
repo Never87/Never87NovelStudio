@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, Calendar, CalendarClock, Clapperboard, Compass, FileX2, ListTree, FolderKanban, Globe2, Languages, Pencil, Trash2, User, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge, Button, ButtonLink, Card, PageHeader } from '@/components/ui';
@@ -54,9 +54,26 @@ export function ProjectDetailPage() {
     useProject(projectId);
   const navigate = useNavigate();
 
-  const [editOpen, setEditOpen] = useState(false);
+      const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [tab, setTab] = useState<DetailTab>('overview');
+
+  // Deep-link support (Dashboard "Continue Writing"): `?tab=writing&chapter=<id>`
+  // opens the Writing tab directly and asks the editor to open that chapter.
+  // Absent params fall back to the existing defaults, so normal navigation is
+  // unchanged.
+  const [searchParams] = useSearchParams();
+  const initialTab: DetailTab = searchParams.get('tab') === 'writing' ? 'writing' : 'overview';
+  const chapterParam = searchParams.get('chapter');
+
+  const [tab, setTab] = useState<DetailTab>(initialTab);
+
+  // Honour a deep-link even when the component is already mounted (e.g. clicking
+  // a second "Continue Writing" link while viewing another project, where React
+  // Router reuses this component). Without this, `useState(initialTab)` would
+  // keep the old tab. Re-syncs whenever the URL query changes.
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab, chapterParam]);
   // Sticky inside the Writing tab, so leaving to the Outline and coming back
   // returns the author to the prose view they were last working in.
   const [writingView, setWritingView] = useState<WritingView>('chapters');
@@ -309,8 +326,8 @@ export function ProjectDetailPage() {
               );
             })}
           </div>
-          {writingView === 'chapters' ? (
-            <WritingPanel projectId={project.id} />
+                    {writingView === 'chapters' ? (
+            <WritingPanel projectId={project.id} initialChapterId={chapterParam} />
           ) : (
             <ScenesProsePanel projectId={project.id} />
           )}

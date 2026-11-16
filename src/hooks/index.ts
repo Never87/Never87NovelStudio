@@ -15,6 +15,8 @@ export { useNarrative } from './use-narrative';
 export type { NarrativeLoadStatus, UseNarrativeResult } from './use-narrative';
 export { useOutline } from './use-outline';
 export type { OutlineLoadStatus, UseOutlineResult } from './use-outline';
+export { useBeatLinks } from './use-beat-links';
+export type { UseBeatLinksResult } from './use-beat-links';
 export { useScenes } from './use-scenes';
 export type { SceneLoadStatus, UseScenesResult } from './use-scenes';
 export { useCharacters } from './use-characters';
@@ -51,4 +53,11 @@ export { useBlurb } from './use-blurb';
 export type { UseBlurbResult, BlurbRunStatus } from './use-blurb';
 export { usePortfolio } from './use-portfolio';
 export type { UsePortfolioResult } from './use-portfolio';
+export { useDashboardStats } from './use-dashboard-stats';
+export type { UseDashboardStatsResult } from './use-dashboard-stats';
+export { useWorkspaceStats } from './use-workspace-stats';
+export type { UseWorkspaceStatsResult } from './use-workspace-stats';
+export { useWritingGoal } from './use-writing-goal';
+export type { UseWritingGoalResult } from './use-writing-goal';
+
 

@@ -29,6 +29,8 @@ import { ProjectRestoreService } from './project-restore-service';
 import { BookAssemblyService } from './book-assembly-service';
 import { coverService } from './cover-service';
 import { PortfolioService } from './portfolio-service';
+import { WritingGoalService } from './writing-goal-service';
+import { WritingStatsService } from './writing-stats-service';
 
 /**
  * Module-level application Services.
@@ -46,7 +48,38 @@ export const characterService = new CharacterService();
 export const narrativeService = new NarrativeService();
 export const outlineService = new OutlineService();
 export const sceneService = new SceneService();
-export const manuscriptService = new ManuscriptService();
+
+/**
+ * Dashboard statistics + writing goals (Round-1 fix).
+ *
+ * `writingGoalService` owns the persisted workspace daily word target shared by
+ * the Dashboard and the future Writing Goals page. `writingStatsService` reads
+ * projects/chapters/manuscripts + the activity ledger to produce REAL dashboard
+ * statistics, and owns the single `recordWordDelta` write path through which the
+ * manuscript editor records daily output. Declared BEFORE `manuscriptService` so
+ * its recorder hook can be wired in below.
+ */
+export const writingGoalService = new WritingGoalService();
+export const writingStatsService = new WritingStatsService(
+  undefined,
+  undefined,
+  undefined,
+  undefined,
+  writingGoalService,
+);
+
+/**
+ * `manuscriptService` routes every changed chapter/scene save through the
+ * activity recorder so the Dashboard's streak / daily output / goal progress are
+ * derived from words that were actually written. The recorder failure is
+ * swallowed inside the manuscript service and never breaks a save.
+ */
+export const manuscriptService = new ManuscriptService(
+  undefined,
+  undefined,
+  undefined,
+  (projectId, wordDelta) => writingStatsService.recordWordDelta(projectId, wordDelta),
+);
 export const manuscriptHistoryService = new ManuscriptHistoryService();
 export const manuscriptTransferService = new ManuscriptTransferService();
 
@@ -565,4 +598,17 @@ export type { BlurbLength, BlurbStyle, BlurbContext } from '@/modules/publishing
 
 export { PortfolioService, PortfolioServiceError, PORTFOLIO_ERROR_CODES } from './portfolio-service';
 export type { PortfolioErrorCode } from './portfolio-service';
+
+/* ------------------- Dashboard stats & goals (Round-1 fix) ------------ */
+
+export { WritingGoalService, WritingGoalServiceError } from './writing-goal-service';
+export { WritingStatsService } from './writing-stats-service';
+export type {
+  DashboardStats,
+  RecentActivityEntry,
+  ContinueWritingTarget,
+  WorkspaceStatistics,
+  ProjectStatistics,
+} from './writing-stats-service';
+export type { ActivityRecorder } from './manuscript-service';
 

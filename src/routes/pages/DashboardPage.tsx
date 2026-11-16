@@ -2,13 +2,11 @@ import { useState } from 'react';
 import { BookOpen, Flame, FolderKanban, LayoutDashboard, PenLine } from 'lucide-react';
 import { Button, PageHeader } from '@/components/ui';
 import { useThemeMode } from '@/core/theme/theme';
-import { useProjects } from '@/hooks';
+import { useDashboardStats, useProjects, useWritingGoal } from '@/hooks';
 import type { CreateProjectInput, UpdateProjectInput } from '@/services';
-import { DEMO_STATS } from '@/modules/dashboard/demo-data';
 import { ProjectsError, ProjectsLoading } from '@/modules/projects/components/ProjectsStates';
 import { ProjectFormDialog } from '@/modules/projects/components/ProjectFormDialog';
 import { StatCard } from '@/modules/dashboard/components/StatCard';
-import { DemoDataBanner } from '@/modules/dashboard/components/DemoDataBanner';
 import { ContinueWritingCard } from '@/modules/dashboard/components/ContinueWritingCard';
 import { RecentProjectsCard } from '@/modules/dashboard/components/RecentProjectsCard';
 import { ProjectStatusCard } from '@/modules/dashboard/components/ProjectStatusCard';
@@ -20,40 +18,60 @@ import { AiStatusCard } from '@/modules/dashboard/components/AiStatusCard';
 /**
  * Dashboard — the workspace home.
  *
- * Layout: welcome header + demo banner, a 4-up stat row, then a two-column
- * workbench (main column 2/3, right rail 1/3) that collapses to a single
- * column below `xl`.
+ * Layout: welcome header, a 4-up stat row, then a two-column workbench
+ * (main column 2/3, right rail 1/3) that collapses to a single column below
+ * `xl`.
  *
- * Data: the project overview blocks (total, recent and status breakdown) are
- * driven by real IndexedDB projects via a SINGLE `useProjects()` call. All
- * writing statistics, goals, activity and AI status remain clearly-labelled
- * demo data from `demo-data.ts`.
+ * Data: EVERYTHING on this page is driven by REAL data — there is no demo
+ * content and no "demo data" banner any more.
+ *   - Projects (total / recent / status breakdown): `useProjects()`.
+ *   - Words Written, Writing Streak, Completed Chapters, Continue Writing,
+ *     Recent Activity, and the weekly goal chart: `useDashboardStats()`, which
+ *     aggregates real projects/manuscripts plus the persisted writing-activity
+ *     ledger (see `WritingStatsService`).
+ *   - The daily writing goal: `useWritingGoal()`, the same persisted source the
+ *     future Writing Goals page will use.
  *
- * Creating a project reuses the shared `ProjectFormDialog`. The hook's
- * `createProject` already refreshes the list on success, so the three real
- * blocks update on their own — no manual `refresh()` here. A failed create is
- * rethrown to the dialog, which shows the message and stays open.
+ * Honest empty states: with no projects / no recorded output, the stat cards
+ * show genuine zeros and the cards show "nothing yet" copy — never fabricated
+ * figures or fake trends. Trend affordances are only shown when there is real
+ * data behind them.
+ *
+ * Creating a project reuses the shared `ProjectFormDialog`; on success the total
+ * and recent lists refresh and the stats snapshot is refetched.
  */
 export function DashboardPage() {
   const themeMode = useThemeMode();
-  // The single source of real project data for this page. Total Projects,
-  // Recent Projects and the status breakdown all read from this one call.
+
+  // Real project list — drives Total, Recent and the status breakdown.
   const { projects, initialLoading, error, refresh, createProject } = useProjects();
+  // Real aggregate statistics (words, streak, completed chapters, activity…).
+  const { stats, refresh: refreshStats } = useDashboardStats();
+  // The persisted daily goal (shared source of truth).
+  const { goal, setGoal, loading: goalSaving } = useWritingGoal();
 
   // Create-dialog visibility. Closed by default.
   const [createOpen, setCreateOpen] = useState(false);
 
   /**
    * Delegates to the hook, which creates the project and refreshes the list.
-   * Deliberately NOT wrapped in try/catch: the error must reach
-   * `ProjectFormDialog` so it can surface it and keep the form open.
-   * The dialog's `onSubmit` accepts Create | Update input; this entry point
-   * only ever creates, so the payload is narrowed (same pattern as
-   * `ProjectsPage.handleCreate`).
+   * After a successful create we also refetch the stats snapshot so the
+   * Continue Writing / activity / counts reflect the new project.
    */
   const handleCreate = async (input: CreateProjectInput | UpdateProjectInput) => {
     await createProject(input as CreateProjectInput);
+    await refreshStats();
   };
+
+  // Derived, display-only values. All sourced from real `stats`; `undefined`
+  // means "not loaded yet" and is rendered as an ellipsis, never a fake zero.
+  const wordsWritten = stats?.wordsWritten;
+  const writingStreak = stats?.writingStreak;
+  const bestStreak = stats?.bestStreak;
+  const completedChapters = stats?.completedChapters;
+  const totalChapters = stats?.totalChapters;
+  const weekWords = stats?.weekWords;
+  const hasActivityHistory = stats?.hasActivityHistory ?? false;
 
   return (
     <div className="space-y-5">
@@ -64,7 +82,7 @@ export function DashboardPage() {
         description="Your AI-assisted novel workbench: planning, world building, drafting and analysis in one place."
         actions={
           <>
-            <Button variant="secondary" size="sm" disabled title="Project management ships in P1">
+            <Button variant="secondary" size="sm" disabled title="Available from a project's Writing tab">
               Import Manuscript
             </Button>
             <Button
@@ -79,14 +97,13 @@ export function DashboardPage() {
         }
         toolbar={
           <span className="text-subtle text-2xs">
-            Theme: <span className="text-muted font-medium capitalize">{themeMode}</span> · P0 preview build
+            Theme: <span className="text-muted font-medium capitalize">{themeMode}</span>
           </span>
         }
       />
 
-      <DemoDataBanner />
-
-      {/* Stat row. Total Projects is real; the other three remain demo data. */}
+      {/* Stat row — every figure is real. `—`/`…` while loading, never a fake
+          number. Trends only shown when real data backs them. */}
       <section aria-label="Workspace statistics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Projects"
@@ -96,31 +113,37 @@ export function DashboardPage() {
         />
         <StatCard
           label="Words Written"
-          value={DEMO_STATS.wordsWritten.toLocaleString()}
+          value={wordsWritten === undefined ? '…' : wordsWritten.toLocaleString()}
           icon={PenLine}
-          trend={{ direction: 'up', label: '+6,420 this week' }}
           hint="across all projects"
+          trend={
+            hasActivityHistory && (weekWords ?? 0) > 0
+              ? { direction: 'up', label: `+${(weekWords ?? 0).toLocaleString()} this week` }
+              : undefined
+          }
         />
         <StatCard
           label="Writing Streak"
-          value={`${DEMO_STATS.writingStreakDays} days`}
+          value={writingStreak === undefined ? '…' : `${writingStreak} ${writingStreak === 1 ? 'day' : 'days'}`}
           icon={Flame}
-          trend={{ direction: 'flat', label: 'No change' }}
-          hint="best: 21 days"
+          hint={
+            hasActivityHistory
+              ? `best: ${bestStreak ?? 0} ${(bestStreak ?? 0) === 1 ? 'day' : 'days'}`
+              : 'no writing recorded yet'
+          }
         />
         <StatCard
           label="Completed Chapters"
-          value={String(DEMO_STATS.completedChapters)}
+          value={completedChapters === undefined ? '…' : String(completedChapters)}
           icon={BookOpen}
-          trend={{ direction: 'up', label: '+3 this week' }}
-          hint="7 drafts open"
+          hint={totalChapters !== undefined ? `${completedChapters ?? 0} of ${totalChapters} chapters` : undefined}
         />
       </section>
 
       {/* Main workbench: 2/3 content + 1/3 rail on wide screens */}
       <div className="grid items-start gap-4 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
-          <ContinueWritingCard />
+          <ContinueWritingCard target={stats?.continueTarget ?? null} wordsWritten={wordsWritten ?? 0} />
           <RecentProjectsCard
             projects={projects}
             loading={initialLoading}
@@ -140,8 +163,21 @@ export function DashboardPage() {
           ) : (
             <ProjectStatusCard projects={projects} />
           )}
-          <WritingGoalCard />
-          <RecentActivityCard />
+          <WritingGoalCard
+            goal={goal}
+            todayWords={stats?.todayWords ?? 0}
+            weekWords={weekWords ?? 0}
+            weekSeries={stats?.weekSeries ?? []}
+            bestStreak={bestStreak ?? 0}
+            streak={writingStreak ?? 0}
+            hasActivityHistory={hasActivityHistory}
+            onSetGoal={async (target) => {
+              await setGoal(target);
+              await refreshStats();
+            }}
+            saving={goalSaving}
+          />
+          <RecentActivityCard entries={stats?.recentActivity ?? []} />
           <AiStatusCard />
         </aside>
       </div>

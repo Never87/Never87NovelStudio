@@ -63,3 +63,43 @@ export function formatRelative(timestamp: number, reference: number = now()): st
   const years = Math.floor(delta / YEAR);
   return `${years} ${years === 1 ? 'year' : 'years'} ago`;
 }
+
+/** Pad a number to two digits (e.g. 5 -> "05"). */
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value);
+}
+
+/**
+ * Formats a timestamp as a LOCAL calendar-day key (`YYYY-MM-DD`).
+ *
+ * "Local" is deliberate: a writer's "today" is their wall-clock day, not a UTC
+ * day. `Date#getFullYear/getMonth/getDate` already return local values, so the
+ * key matches what the user considers "today". The ISO-ordered shape means
+ * lexicographic comparison equals chronological comparison, which is what the
+ * writing-activity rollup relies on.
+ *
+ * @param timestamp Unix epoch milliseconds (defaults to now).
+ */
+export function localDateKey(timestamp: number = now()): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Returns the local date key `daysAgo` days before `reference` (0 = today).
+ *
+ * Built with the local-time `Date` setters (not millisecond subtraction) so it
+ * stays correct across DST transitions and month/year boundaries.
+ *
+ * @param daysAgo Whole days to step back (>= 0).
+ * @param reference Base instant (defaults to now).
+ */
+export function localDateKeyDaysAgo(daysAgo: number, reference: number = now()): string {
+  const date = new Date(reference);
+  date.setDate(date.getDate() - Math.max(0, Math.trunc(daysAgo)));
+  return localDateKey(date.getTime());
+}
+

@@ -1,20 +1,56 @@
-import { BookOpen, CalendarDays, PenLine, TrendingUp } from 'lucide-react';
-import { Badge, Button, Card, CardHeader } from '@/components/ui';
-import { DEMO_PROJECTS } from '@/modules/dashboard/demo-data';
+import { BookOpen, CalendarDays, PenLine, Plus, TrendingUp } from 'lucide-react';
+import { ButtonLink, Card, CardHeader, EmptyState } from '@/components/ui';
+import type { ContinueWritingTarget } from '@/services';
+import { formatRelative } from '@/utils/date';
 
-const STATUS_META = {
-  drafting: { label: 'Drafting', tone: 'accent' as const },
-  revising: { label: 'Revising', tone: 'warning' as const },
-  outlining: { label: 'Outlining', tone: 'info' as const },
-};
+export interface ContinueWritingCardProps {
+  /** Where to resume writing, derived from REAL data. Null when nothing to open. */
+  target: ContinueWritingTarget | null;
+  /** Whole-workspace words, for the "total so far" hint. */
+  wordsWritten: number;
+}
 
 /**
  * Continue Writing — the primary action surface.
- * Shows the most recently edited demo project with a direct resume affordance.
+ *
+ * Driven entirely by REAL data: it resumes the most recently edited project and
+ * chapter (see `WritingStatsService.pickContinueTarget`). The action deep-links
+ * to the project's Writing tab with the exact chapter pre-selected
+ * (`?tab=writing&chapter=<id>`), so the editor opens the right chapter — not just
+ * the project. When there is nothing to resume (no projects, or no chapters yet)
+ * it shows an honest empty state instead of a fabricated novel.
  */
-export function ContinueWritingCard() {
-  const project = DEMO_PROJECTS[0];
-  const status = STATUS_META[project.status];
+export function ContinueWritingCard({ target, wordsWritten }: ContinueWritingCardProps) {
+  if (!target) {
+    return (
+      <Card padding="lg">
+        <CardHeader
+          title="Continue Writing"
+          description="Pick up where you left off"
+          icon={<PenLine className="size-4" />}
+        />
+        <div className="mt-4">
+          <EmptyState
+            variant="plain"
+            icon={<BookOpen className="size-5" aria-hidden />}
+            title="Nothing to resume yet"
+            description="Create a project, add a chapter in its Outline, and your most recent draft will appear here ready to continue."
+            action={
+              <ButtonLink to="/projects" size="sm" variant="primary" iconLeft={<Plus className="size-3.5" />}>
+                Go to Projects
+              </ButtonLink>
+            }
+          />
+        </div>
+      </Card>
+    );
+  }
+
+  // Deep link opens the Writing tab on this exact chapter. When no chapter
+  // exists yet, land on the project so the author can create one.
+  const href = target.chapterId
+    ? `/projects/${target.projectId}?tab=writing&chapter=${encodeURIComponent(target.chapterId)}`
+    : `/projects/${target.projectId}`;
 
   return (
     <Card padding="lg" className="relative overflow-hidden">
@@ -25,49 +61,43 @@ export function ContinueWritingCard() {
           title="Continue Writing"
           description="Pick up where you left off"
           icon={<PenLine className="size-4" />}
-          action={<Badge tone={status.tone}>{status.label}</Badge>}
         />
 
         <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-subtle text-2xs font-medium uppercase tracking-wider">{project.series}</p>
-            <h3 className="text-ink truncate text-lg font-semibold">{project.title}</h3>
+            <p className="text-subtle text-2xs font-medium uppercase tracking-wider">
+              {target.chapterTitle ? 'Last edited chapter' : 'Project'}
+            </p>
+            <h3 className="text-ink truncate text-lg font-semibold">{target.projectTitle}</h3>
             <p className="text-muted mt-0.5 text-xs">
-              Chapter 12 · “The Drowned Bell” — last edited {project.updatedAt}
+              {target.chapterTitle
+                ? `“${target.chapterTitle}” — last edited ${formatRelative(target.updatedAt)}`
+                : `No chapters written yet — add one to start. Last updated ${formatRelative(target.updatedAt)}`}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" size="sm" disabled title="Story Editor ships in P4">
+            <ButtonLink variant="secondary" size="sm" to={`/projects/${target.projectId}?tab=outline`}>
               Open Outline
-            </Button>
-            <Button variant="primary" size="sm" disabled title="Story Editor ships in P4" iconLeft={<PenLine className="size-3.5" />}>
-              Resume Writing
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <div className="text-subtle mb-1 flex items-center justify-between text-2xs">
-            <span>Draft progress</span>
-            <span className="text-muted font-medium">{project.progress}%</span>
-          </div>
-          <div className="bg-surface-muted h-1.5 w-full overflow-hidden rounded-full">
-            <div className="bg-accent h-full rounded-full" style={{ width: `${project.progress}%` }} />
+            </ButtonLink>
+            <ButtonLink
+              variant="primary"
+              size="sm"
+              to={href}
+              iconLeft={<PenLine className="size-3.5" />}
+            >
+              {target.chapterTitle ? 'Resume Writing' : 'Start Writing'}
+            </ButtonLink>
           </div>
         </div>
 
         <div className="text-muted mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
           <span className="inline-flex items-center gap-1.5">
-            <BookOpen className="text-subtle size-3.5" aria-hidden />
-            {project.chapters} chapters
-          </span>
-          <span className="inline-flex items-center gap-1.5">
             <TrendingUp className="text-subtle size-3.5" aria-hidden />
-            {project.words.toLocaleString()} words
+            {wordsWritten.toLocaleString()} words in your workspace
           </span>
           <span className="inline-flex items-center gap-1.5">
             <CalendarDays className="text-subtle size-3.5" aria-hidden />
-            Updated {project.updatedAt}
+            Updated {formatRelative(target.updatedAt)}
           </span>
         </div>
       </div>

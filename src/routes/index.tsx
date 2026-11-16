@@ -215,6 +215,83 @@ const RoyaltyCalculatorPage = lazy(async () => {
   return { default: mod.RoyaltyCalculatorPage };
 });
 
+/** Writing Statistics & Writing Goals (Round 1 — Workspace) — real pages. */
+const StatisticsPage = lazy(async () => {
+  const mod = await import('@/modules/stats/StatisticsPage');
+  return { default: mod.StatisticsPage };
+});
+
+const GoalsPage = lazy(async () => {
+  const mod = await import('@/modules/goals/GoalsPage');
+  return { default: mod.GoalsPage };
+});
+
+/** Standalone Novel Creation modules (Round 1) — share the project tab panels. */
+const WorldBuildingPage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.WorldBuildingPage };
+});
+const CharactersPage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.CharactersPage };
+});
+const NarrativePlanningPage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.NarrativePlanningPage };
+});
+const OutlinePage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.OutlinePage };
+});
+const SceneBuilderPage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.SceneBuilderPage };
+});
+const StoryEditorPage = lazy(async () => {
+  const mod = await import('@/modules/creation/CreationPages');
+  return { default: mod.StoryEditorPage };
+});
+
+/** Timeline (Round 1) — derived from outline + continuity facts. */
+const TimelinePage = lazy(async () => {
+  const mod = await import('@/modules/creation/TimelinePage');
+  return { default: mod.TimelinePage };
+});
+
+/** AI Toolbox (Round 1) — Idea Generator, Model Playground, Style Analyzer. */
+const IdeaGeneratorPage = lazy(async () => {
+  const mod = await import('@/modules/ai-toolbox/IdeaGeneratorPage');
+  return { default: mod.IdeaGeneratorPage };
+});
+
+const ModelPlaygroundPage = lazy(async () => {
+  const mod = await import('@/modules/ai-toolbox/ModelPlaygroundPage');
+  return { default: mod.ModelPlaygroundPage };
+});
+
+const StyleAnalyzerPage = lazy(async () => {
+  const mod = await import('@/modules/ai-toolbox/StyleAnalyzerPage');
+  return { default: mod.StyleAnalyzerPage };
+});
+
+/** System settings & Project I/O (Round 1) — real pages. */
+const GeneralSettingsPage = lazy(async () => {
+  const mod = await import('@/modules/system/GeneralSettingsPage');
+  return { default: mod.GeneralSettingsPage };
+});
+const EditorSettingsPage = lazy(async () => {
+  const mod = await import('@/modules/system/EditorSettingsPage');
+  return { default: mod.EditorSettingsPage };
+});
+const HelpPage = lazy(async () => {
+  const mod = await import('@/modules/system/HelpPage');
+  return { default: mod.HelpPage };
+});
+const ProjectIOPage = lazy(async () => {
+  const mod = await import('@/modules/data/ProjectIOPage');
+  return { default: mod.ProjectIOPage };
+});
+
 /** Nav ids that have real pages and must be excluded from placeholders. */
 const REAL_PAGE_NAV_IDS = new Set([
   'dashboard',
@@ -246,6 +323,18 @@ const REAL_PAGE_NAV_IDS = new Set([
   'blurb-generator',
   'portfolio',
   'royalty-calculator',
+  'stats',
+  'goals',
+  'world-building',
+  'characters',
+  'narrative',
+  'outline',
+  'scenes',
+  'story-editor',
+  'timeline',
+  'idea-generator',
+  'model-playground',
+  'style-analyzer',
 ]);
 
 /** Build one route per navigation item, skipping pages declared above. */
@@ -310,6 +399,26 @@ export const router = createBrowserRouter(
         // Portfolio & Royalty Calculator (P9 Batch E).
         { path: 'publishing/portfolio', element: withRouteSuspense(<PortfolioPage />) },
         { path: 'publishing/royalty-calculator', element: withRouteSuspense(<RoyaltyCalculatorPage />) },
+        // Writing Statistics & Writing Goals (Round 1 — Workspace) — real pages.
+        { path: 'statistics', element: withRouteSuspense(<StatisticsPage />) },
+        { path: 'goals', element: withRouteSuspense(<GoalsPage />) },
+        // Standalone Novel Creation modules (Round 1) — reuse project tab panels.
+        { path: 'novel/world-building', element: withRouteSuspense(<WorldBuildingPage />) },
+        { path: 'novel/characters', element: withRouteSuspense(<CharactersPage />) },
+        { path: 'novel/narrative-planning', element: withRouteSuspense(<NarrativePlanningPage />) },
+        { path: 'novel/outline', element: withRouteSuspense(<OutlinePage />) },
+        { path: 'novel/scene-builder', element: withRouteSuspense(<SceneBuilderPage />) },
+        { path: 'novel/story-editor', element: withRouteSuspense(<StoryEditorPage />) },
+        { path: 'novel/timeline', element: withRouteSuspense(<TimelinePage />) },
+        // AI Toolbox (Round 1) — real pages.
+        { path: 'ai/idea-generator', element: withRouteSuspense(<IdeaGeneratorPage />) },
+        { path: 'ai/model-playground', element: withRouteSuspense(<ModelPlaygroundPage />) },
+        { path: 'ai/style-analyzer', element: withRouteSuspense(<StyleAnalyzerPage />) },
+        // System settings & Project I/O (Round 1) — real pages.
+        { path: 'settings/general', element: withRouteSuspense(<GeneralSettingsPage />) },
+        { path: 'settings/editor', element: withRouteSuspense(<EditorSettingsPage />) },
+        { path: 'settings/help', element: withRouteSuspense(<HelpPage />) },
+        { path: 'data/project-import-export', element: withRouteSuspense(<ProjectIOPage />) },
         ...moduleRoutes,
         // Unknown paths render a real 404 inside the shell (not a blank page).
         { path: '*', element: <NotFoundPage /> },

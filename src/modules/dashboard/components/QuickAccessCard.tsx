@@ -9,29 +9,34 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { Card, CardHeader } from '@/components/ui';
 
 interface QuickAction {
   label: string;
   description: string;
   icon: LucideIcon;
+  /** Real route. Placeholder modules render an honest "planned" empty state. */
+  to: string;
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { label: 'World Building', description: 'Locations, factions, rules', icon: Globe2 },
-  { label: 'Characters', description: 'Cast, arcs and relationships', icon: Users },
-  { label: 'Manuscript Import', description: 'Parse an existing draft', icon: BookText },
-  { label: 'Extraction Review', description: 'Verify extracted facts', icon: ClipboardCheck },
-  { label: 'AI Assistance', description: 'Draft and rewrite prose', icon: Sparkles },
-  { label: 'Export Manager', description: 'Package for publishing', icon: Package },
-  { label: 'Writing Statistics', description: 'Output over time', icon: BarChart3 },
-  { label: 'Project Snapshots', description: 'Restore-safe checkpoints', icon: Download },
+  { label: 'World Building', description: 'Locations, factions, rules', icon: Globe2, to: '/novel/world-building' },
+  { label: 'Characters', description: 'Cast, arcs and relationships', icon: Users, to: '/novel/characters' },
+  { label: 'Manuscript Import', description: 'Parse an existing draft', icon: BookText, to: '/import/manuscript' },
+  { label: 'Extraction Review', description: 'Verify extracted facts', icon: ClipboardCheck, to: '/import/review-center' },
+  { label: 'AI Assistance', description: 'Draft and rewrite prose', icon: Sparkles, to: '/ai/assistance' },
+  { label: 'Export Manager', description: 'Package for publishing', icon: Package, to: '/publishing/export-manager' },
+  { label: 'Writing Statistics', description: 'Output over time', icon: BarChart3, to: '/statistics' },
+  { label: 'Project Snapshots', description: 'Restore-safe checkpoints', icon: Download, to: '/data/snapshots' },
 ];
 
 /**
- * Quick access grid. Every tile targets a module that has not shipped yet,
- * so tiles are rendered disabled with a "Soon" affordance rather than being
- * fake-clickable.
+ * Quick access grid.
+ *
+ * Every tile is a REAL link to its module's canonical route. Modules that have
+ * not shipped yet render an honest "planned" empty state on their own page — the
+ * dashboard never fakes their content here.
  */
 export function QuickAccessCard() {
   return (
@@ -41,12 +46,10 @@ export function QuickAccessCard() {
         {QUICK_ACTIONS.map((action) => {
           const Icon = action.icon;
           return (
-            <button
+            <Link
               key={action.label}
-              type="button"
-              disabled
-              title={`${action.label} — coming soon`}
-              className="bg-surface-muted/60 hover:border-line-strong flex cursor-default flex-col items-start gap-2 rounded-md border border-line px-2.5 py-2 text-left opacity-90 transition-colors"
+              to={action.to}
+              className="bg-surface-muted/60 hover:border-line-strong focus-visible:border-line-strong flex flex-col items-start gap-2 rounded-md border border-line px-2.5 py-2 text-left transition-colors"
             >
               <span className="text-accent grid size-6 place-items-center rounded-md bg-accent-soft">
                 <Icon className="size-3.5" aria-hidden />
@@ -55,7 +58,7 @@ export function QuickAccessCard() {
                 <span className="text-ink block truncate text-xs font-medium">{action.label}</span>
                 <span className="text-subtle block truncate text-2xs">{action.description}</span>
               </span>
-            </button>
+            </Link>
           );
         })}
       </div>

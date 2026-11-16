@@ -188,3 +188,13 @@ export type {
   PortfolioEntry,
   UpdatePortfolioProfileInput,
 } from '@/schemas/portfolio-profile';
+
+/* --------------- Dashboard fix — Writing Goal & Activity ------------------ */
+export type { WritingGoal, WritingGoalScope } from '@/schemas/writing-goal';
+export {
+  GLOBAL_WRITING_GOAL_ID,
+  WRITING_GOAL_SCOPES,
+  MIN_DAILY_WORD_TARGET,
+  MAX_DAILY_WORD_TARGET,
+} from '@/schemas/writing-goal';
+export type { WritingActivity } from '@/schemas/writing-activity';
