@@ -77,7 +77,7 @@ function TimelineView({ projectId }: { projectId: string }) {
         title="No chapters yet"
         description="The timeline is built from your outline. Add volumes and chapters, then record continuity facts to see events appear in story order."
         action={
-          <ButtonLink variant="primary" size="sm" to={`/creation/outline?project=${projectId}`}>
+          <ButtonLink variant="primary" size="sm" to={`/novel/outline?project=${projectId}`}>
             Build the outline
           </ButtonLink>
         }

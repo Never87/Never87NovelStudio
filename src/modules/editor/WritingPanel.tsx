@@ -47,7 +47,7 @@ export interface WritingPanelProps {
  * `useChapterEditor`, which debounces, serialises and revision-checks the save.
  */
 export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps) {
-  const { outline, status: outlineStatus, loading } = useOutline(projectId);
+  const { outline, status: outlineStatus, loading, refresh: refreshOutline } = useOutline(projectId);
   // Seed with the requested deep-link chapter (if any); the effect below falls
   // back to the first chapter only when nothing is selected yet.
   const [chapterId, setChapterId] = useState<string | null>(initialChapterId ?? null);
@@ -101,21 +101,33 @@ export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps)
 
   if (chapters.length === 0) {
     return (
-      <EmptyState
-        icon={<BookOpen className="size-5" aria-hidden />}
-        title="No chapters to write yet"
-        description="The editor writes into chapters. Create a chapter in the Outline tab first — or import a Markdown draft to create them in bulk."
-        action={
-          <Button
-            variant="secondary"
-            size="sm"
-            iconLeft={<Upload className="size-3.5" />}
-            onClick={() => setTransferOpen(true)}
-          >
-            Import Markdown
-          </Button>
-        }
-      />
+      <div className="space-y-4">
+        <EmptyState
+          icon={<BookOpen className="size-5" aria-hidden />}
+          title="No chapters to write yet"
+          description="The editor writes into chapters. Create a chapter in the Outline tab first — or import a Markdown draft to create them in bulk."
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              iconLeft={<Upload className="size-3.5" />}
+              onClick={() => setTransferOpen(true)}
+            >
+              Import Markdown
+            </Button>
+          }
+        />
+        {/* The dialog MUST be mounted in the empty state too, otherwise the
+            button only flips state and nothing appears. Import works with no
+            chapters: the dialog creates a default volume when the project has
+            none, then writes the chapters. */}
+        <ImportExportDialog
+          open={transferOpen}
+          projectId={projectId}
+          onClose={() => setTransferOpen(false)}
+          onImported={() => void refreshOutline()}
+        />
+      </div>
     );
   }
 
@@ -169,6 +181,7 @@ export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps)
         open={transferOpen}
         projectId={projectId}
         onClose={() => setTransferOpen(false)}
+        onImported={() => void refreshOutline()}
       />
     </div>
   );

@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { ALL_NAV_ITEMS, assertNavigationIntegrity } from '@/config/navigation';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { RouteErrorPage } from './pages/RouteErrorPage';
 import { createModulePage, withRouteSuspense } from './lazy';
 
 /**
@@ -351,6 +352,10 @@ export const router = createBrowserRouter(
     {
       path: '/',
       element: <AppShell />,
+      // Route-level fallback: any render/commit error inside a page shows a
+      // recoverable error page instead of React Router's dev error screen.
+      // This is only a safety net — it does not mask or paper over any bug.
+      errorElement: <RouteErrorPage />,
       children: [
         // Landing page: `/` redirects to the canonical dashboard URL.
         { index: true, element: <Navigate to="/dashboard" replace /> },

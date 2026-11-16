@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { useOutline } from '@/hooks';
-import { manuscriptTransferService, type ImportPreviewChapter } from '@/services';
+import { manuscriptTransferService, outlineService, type ImportPreviewChapter } from '@/services';
 import { cn } from '@/utils/cn';
 import { ProjectDialog } from '@/modules/projects/components/ProjectDialog';
 
@@ -10,6 +10,13 @@ export interface ImportExportDialogProps {
   open: boolean;
   projectId: string;
   onClose: () => void;
+  /**
+   * Called after a successful import so the host (e.g. the Story Editor) can
+   * refresh its OWN outline data. Hooks are not shared across component
+   * instances, so the editor must refetch to leave its empty state and show
+   * the new chapters without a manual page reload.
+   */
+  onImported?: () => void;
 }
 
 /**
@@ -19,8 +26,8 @@ export interface ImportExportDialogProps {
  * and any duplicate titles are shown BEFORE anything is written, so a bulk
  * import can never silently create junk chapters or overwrite prose.
  */
-export function ImportExportDialog({ open, projectId, onClose }: ImportExportDialogProps) {
-  const { outline } = useOutline(projectId);
+export function ImportExportDialog({ open, projectId, onClose, onImported }: ImportExportDialogProps) {
+  const { outline, refresh } = useOutline(projectId);
   const volumes = outline;
   const chaptersOf = (volumeId: string) =>
     outline.find((entry) => entry.volume.id === volumeId)?.chapters ?? [];
@@ -54,20 +61,31 @@ export function ImportExportDialog({ open, projectId, onClose }: ImportExportDia
   };
 
   const handleImport = async () => {
-    if (!activeVolumeId) {
-      setError('Create a volume in the Outline tab first.');
-      return;
-    }
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
+      // A project can reach this dialog with NO chapters and NO volumes (e.g.
+      // the Story Editor empty state). Importing must still work, so create a
+      // default volume on demand instead of asking the user to go to Outline.
+      let targetVolumeId = activeVolumeId;
+      if (!targetVolumeId) {
+        const created = await outlineService.createVolume(projectId, { title: 'Volume 1' });
+        targetVolumeId = created.id;
+        setVolumeId(created.id);
+      }
+
       const result = await manuscriptTransferService.importMarkdown(
         projectId,
-        activeVolumeId,
+        targetVolumeId,
         markdown,
-        { volumeId: activeVolumeId, onDuplicate },
+        { volumeId: targetVolumeId, onDuplicate },
       );
+      // Refresh this dialog's outline so the new volume/chapters appear, and
+      // notify the host so ITS outline (a separate hook instance) refetches and
+      // the editor leaves the empty state.
+      await refresh();
+      onImported?.();
       setMessage(
         `Imported ${result.createdChapterIds.length} chapter(s), ` +
           `${result.importedWords.toLocaleString()} words` +
