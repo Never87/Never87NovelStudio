@@ -159,6 +159,33 @@ export function closeSlashMenu(view: EditorView): void {
   view.dispatch(view.state.tr.setMeta('n87-slash-close', true));
 }
 
+/**
+ * Removes the typed `/query` AND closes the menu in a SINGLE transaction.
+ *
+ * Why this exists (bug 2): the React menu used to read the plugin's `from`/`to`
+ * via `getSlashState(editor)` at execution time and then call `deleteRange`.
+ * Those positions are only valid for the document they were computed against; a
+ * headless focus/selection round-trip or a keypress between opening the menu and
+ * pressing Enter could make them stale, deleting the wrong span (or nothing), so
+ * the command acted on the wrong block or left the `/query` in the prose.
+ *
+ * Here the range is passed explicitly from the state the menu was RENDERED with,
+ * and the deletion + close happen atomically. The range is clamped to the live
+ * document so an out-of-date value can never throw. Returns the positions the
+ * caret should land on (i.e. the slash position) so a caller can place the caret
+ * deterministically before running the command.
+ */
+export function removeSlashQuery(view: EditorView, from: number, to: number): number {
+  const size = view.state.doc.content.size;
+  const safeFrom = Math.min(Math.max(from, 0), size);
+  const safeTo = Math.min(Math.max(to, safeFrom), size);
+  const tr = view.state.tr;
+  if (safeTo > safeFrom) tr.delete(safeFrom, safeTo);
+  tr.setMeta('n87-slash-close', true);
+  view.dispatch(tr);
+  return safeFrom;
+}
+
 /** Reads the current slash state from an editor (or the empty state). */
 export function getSlashState(editor: Editor): SlashState {
   return slashPluginKey.getState(editor.state) ?? EMPTY_SLASH_STATE;

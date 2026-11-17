@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   Bold,
@@ -76,6 +76,31 @@ export function EditorToolbar({ editor, onOpenSlashMenu, disabled = false, class
     getCommand(id).run(editor);
   };
 
+  // Selection-preserving native-select handlers. Formatting BUTTONS prevent
+  // their own mousedown (so the caret stays in the editor), but a native
+  // `<select>` must NOT — preventing it is exactly what stops the dropdown from
+  // opening (bug 1). Instead we snapshot the selection on `focus`/`mousedown`
+  // (before the browser moves DOM focus) and re-apply it after the value change
+  // so the command acts on the same range.
+  const selectionRef = useRef<{ from: number; to: number } | null>(null);
+  const captureSelection = () => {
+    if (!editor) return;
+    const { from, to } = editor.state.selection;
+    selectionRef.current = { from, to };
+  };
+  const restoreSelection = () => {
+    if (!editor || !selectionRef.current) return;
+    const { from, to } = selectionRef.current;
+    const size = editor.state.doc.content.size;
+    // Clamp defensively: the doc cannot change while the native picker is open,
+    // but a defensive clamp keeps this safe against any future listeners.
+    editor.commands.setTextSelection({ from: Math.min(from, size), to: Math.min(to, size) });
+  };
+  const applyTypographyFromSelect = (patch: Parameters<typeof updateTypography>[0]) => {
+    restoreSelection();
+    updateTypography(patch);
+  };
+
   const canUndo = !disabled && !!editor?.can().undo();
   const canRedo = !disabled && !!editor?.can().redo();
   const headingActive = (level: 1 | 2 | 3) =>
@@ -83,18 +108,29 @@ export function EditorToolbar({ editor, onOpenSlashMenu, disabled = false, class
 
   return (
     <div
-      className={cn('flex flex-wrap items-center gap-0.5', className)}
+      className={cn(
+        // Width stability (bug 4): the toolbar never shrinks or changes width
+        // because of an active/disabled state. `shrink-0` keeps it from being
+        // squeezed by the flex row; `whitespace-nowrap` prevents an inner wrap
+        // from altering the row height mid-click. The children keep fixed box
+        // sizes (the active state only changes background colour).
+        'flex flex-nowrap items-center gap-0.5 whitespace-nowrap',
+        className,
+      )}
       role="toolbar"
       aria-label="Formatting"
     >
-      {/* Font family */}
+      {/* Font family — native <select>. We deliberately do NOT prevent its
+          mousedown: doing so blocked the native dropdown (bug 1). The editor
+          selection is snapshotted on focus and re-applied on change instead. */}
       <select
         aria-label="Font family"
         value={typography.fontFamily}
         disabled={disabled}
-        onMouseDown={(event) => event.preventDefault()}
-        onChange={(event) => updateTypography({ fontFamily: event.target.value as EditorFontFamily })}
-        className="border-line bg-surface text-ink hover:bg-surface-muted focus-visible:border-accent h-7 rounded border px-1 text-2xs"
+        onFocus={captureSelection}
+        onMouseDown={captureSelection}
+        onChange={(event) => applyTypographyFromSelect({ fontFamily: event.target.value as EditorFontFamily })}
+        className="border-line bg-surface text-ink hover:bg-surface-muted focus-visible:border-accent h-7 w-20 shrink-0 rounded border px-1 text-2xs"
       >
         {FONT_OPTIONS.map((option) => (
           <option key={option.id} value={option.id}>
@@ -103,14 +139,16 @@ export function EditorToolbar({ editor, onOpenSlashMenu, disabled = false, class
         ))}
       </select>
 
-      {/* Font size */}
+      {/* Font size — same native behaviour as the family select. Fixed width so
+          the number of digits (13 vs 24) cannot reflow the toolbar. */}
       <select
         aria-label="Font size"
         value={typography.fontSize}
         disabled={disabled}
-        onMouseDown={(event) => event.preventDefault()}
-        onChange={(event) => updateTypography({ fontSize: Number(event.target.value) })}
-        className="border-line bg-surface text-ink hover:bg-surface-muted focus-visible:border-accent h-7 rounded border px-1 text-2xs tabular-nums"
+        onFocus={captureSelection}
+        onMouseDown={captureSelection}
+        onChange={(event) => applyTypographyFromSelect({ fontSize: Number(event.target.value) })}
+        className="border-line bg-surface text-ink hover:bg-surface-muted focus-visible:border-accent h-7 w-14 shrink-0 rounded border px-1 text-2xs tabular-nums"
       >
         {FONT_SIZES.map((size) => (
           <option key={size} value={size}>
@@ -193,7 +231,7 @@ export function EditorToolbar({ editor, onOpenSlashMenu, disabled = false, class
 }
 
 function Divider() {
-  return <span aria-hidden className="bg-line mx-0.5 h-4 w-px" />;
+  return <span aria-hidden className="bg-line mx-0.5 h-4 w-px shrink-0" />;
 }
 
 function ToolbarButton({
@@ -225,7 +263,12 @@ function ToolbarButton({
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       className={cn(
-        'inline-flex h-7 min-w-7 items-center justify-center gap-0.5 rounded px-1 text-2xs transition-colors',
+        // Fixed box, identical in every state. The active/inactive classes below
+        // only change colour — never width, padding, border or font — so toggling
+        // a heading/bold state cannot resize the button or reflow the row (bug 4).
+        // `shrink-0` stops the row's flex layout from compressing buttons.
+        'inline-flex h-7 shrink-0 items-center justify-center gap-0.5 rounded px-1 text-2xs tabular-nums transition-colors',
+        text ? 'min-w-9' : 'w-7',
         'disabled:cursor-not-allowed disabled:opacity-40',
         active
           ? 'bg-accent-soft text-accent-soft-text'

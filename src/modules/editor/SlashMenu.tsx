@@ -29,7 +29,7 @@ import {
 import {
   closeSlashMenu,
   EMPTY_SLASH_STATE,
-  getSlashState,
+  removeSlashQuery,
   subscribeSlashMenu,
   type SlashState,
 } from './editor-slash-extension';
@@ -84,6 +84,8 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   // Whether the menu was opened by the toolbar button (vs. typing `/`). Kept so
   // the menu can render even before any query is typed.
@@ -103,14 +105,21 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
     return unsubscribe;
   }, [editor]);
 
-  /* ---- Toolbar `/` button → force the menu open at the cursor ---- */
+  /* ---- Toolbar `/` button → open the menu at the cursor ----
+   * We do NOT insert a literal `/` into the prose (the old behaviour left a
+   * stray slash when the user then picked a command — bug 2). Instead we force
+   * the menu open over the current caret; because there is no query the plugin
+   * state stays "closed", so the menu uses the forced-open path and the list
+   * starts fresh. The trigger range is captured as the empty caret. */
   useEffect(() => {
     if (!editor || openSignal === 0) return;
-    // Insert a `/` at the cursor, then the plugin opens on the resulting
-    // transaction. If the selection is not empty, insert over it.
-    editor.chain().focus().insertContent('/').run();
+    // Collapse any selection to its end so the command applies to a caret.
+    const { to } = editor.state.selection;
+    editor.commands.setTextSelection(to);
     setForcedOpen(true);
+    setActiveIndex(0);
     setUrlMode(null);
+    setError(null);
   }, [editor, openSignal]);
 
   const open = state.open || (forcedOpen && !!editor);
@@ -149,7 +158,7 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
       // than closing it (so the same panel collects the value).
       if (command.id === 'link' || command.id === 'image') {
         // Remove the typed `/query` so it does not remain in the prose.
-        stripQuery(editor);
+        stripQuery(editor, state);
         setUrlMode({ command: command.id });
         setUrl('');
         setError(null);
@@ -157,12 +166,20 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
         return;
       }
 
-      stripQuery(editor);
+      // Delete the `/query` (captured range) and close in ONE transaction, then
+      // place the caret deterministically before running the command.
+      const caret = stripQuery(editor, state);
+      if (caret !== null) {
+        editor.commands.setTextSelection(caret);
+      } else if (!state.open) {
+        // Toolbar `/` path: no query was typed, so there is nothing to strip —
+        // the command simply applies at the current caret. Close the menu.
+        closeSlashMenu(editor.view);
+      }
       getCommand(command.id).run(editor);
-      closeSlashMenu(editor.view);
       setForcedOpen(false);
     },
-    [editor],
+    [editor, state],
   );
 
   /* ---- URL submit for Link / Image ---- */
@@ -221,6 +238,24 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
     return () => dom.removeEventListener('keydown', handler, true);
   }, [open, editor, visible, clampedActive, execute, urlMode, submitUrl]);
 
+  /* ---- Keep the active option visible while navigating (bug 3) ----
+   * ArrowDown/Up only change `activeIndex`; the list has a fixed `max-h-64` and
+   * scrolls. Without this the highlight would walk off-screen and the author
+   * could not see what Enter would run. We scroll the ITEM into view INSIDE the
+   * list only (block: 'nearest' preserves the shortest movement and prevents the
+   * outer page/manuscript from scrolling), and reset the scroll to the top when
+   * the query changes so a filtered list starts at its first item. */
+  useEffect(() => {
+    if (!open || urlMode) return;
+    const item = itemRefs.current[clampedActive];
+    item?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [open, urlMode, clampedActive, visible.length]);
+
+  // A new query rebuilds the list; scroll back to the top of the container.
+  useEffect(() => {
+    listRef.current?.scrollTo?.({ top: 0 });
+  }, [state.query]);
+
   if (!open) return null;
 
   return (
@@ -276,12 +311,15 @@ export function SlashMenu({ editor, openSignal }: SlashMenuProps) {
           No commands match “{normaliseQuery(state.query)}”.
         </p>
       ) : (
-        <ul className="max-h-64 overflow-y-auto py-1">
+        <ul ref={listRef} className="max-h-64 overflow-y-auto py-1">
           {visible.map((match, index) => (
             <li key={match.command.id}>
               <button
                 type="button"
                 role="option"
+                ref={(node) => {
+                  itemRefs.current[index] = node;
+                }}
                 aria-selected={index === clampedActive}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => execute(match)}
@@ -312,14 +350,20 @@ function AliasHint({ command }: { command: EditorCommand }) {
 }
 
 /**
- * Removes the typed `/query` before executing/routing. Uses the plugin state's
- * `from`/`to` so exactly the slash-run is deleted, leaving surrounding prose and
- * the cursor position correct. Falls back to reading the textblock when the menu
- * was force-opened by the toolbar button (state `from/to` are still valid there).
+ * Removes the typed `/query` before executing/routing.
+ *
+ * The range comes from the plugin state the menu was LAST RENDERED with (the
+ * `state` in the closure), not from a fresh `getSlashState()` read at execution
+ * time. That live read was the stale-range bug: a focus/selection round-trip
+ * between opening the menu and pressing Enter could make the live positions
+ * differ from the ones the list was built against. Deleting with the captured
+ * range (clamped to the document) reliably removes exactly the slash-run.
+ *
+ * Returns the position the caret should move to (the former slash location),
+ * or `null` when the menu was force-opened by the toolbar with no query to strip.
  */
-function stripQuery(editor: Editor): void {
-  const { from, to } = getSlashState(editor);
-  if (to > from) {
-    editor.chain().focus().deleteRange({ from, to }).run();
-  }
+function stripQuery(editor: Editor, state: SlashState): number | null {
+  const { from, to } = state;
+  if (!(to > from)) return null;
+  return removeSlashQuery(editor.view, from, to);
 }

@@ -26,6 +26,7 @@
     "verify:writing:scene:ui": "node scripts/p4-scene-ui-verify.cjs",
     "verify:workspace:ui": "node scripts/p10-writing-workspace-ui-verify.cjs",
     "verify:editor-formatting": "node scripts/p11-editor-formatting-verify.cjs",
+    "verify:editor-ui-bugs": "node scripts/p11-editor-ui-bugs-verify.cjs",
     "verify:ai": "node scripts/p5-verify.cjs",
     "verify:ai:ui": "node scripts/p5-ui-verify.cjs",
     "verify:prompt": "node scripts/p6-verify.cjs",
