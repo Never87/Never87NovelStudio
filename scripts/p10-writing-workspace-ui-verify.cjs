@@ -250,19 +250,18 @@ async function main() {
   })()`);
   record('focus: exiting Focus restores the global chrome and page header', afterExit?.hasDashboardLink === true && afterExit?.hasPageHeader === true, JSON.stringify(afterExit));
 
-  // 4. Typography: open the menu, pick "Sans" font, verify it persists to storage
-  // AND applies as a CSS variable on the writing surface.
+  // 4. Typography: pick a font via the formatting toolbar's Font family <select>
+  //    (the Font control lives in the toolbar, not the appearance popover), and
+  //    verify it persists to storage AND applies as a CSS variable on the surface.
   const typo = await cdp.eval(`(async () => {
     const before = JSON.parse(localStorage.getItem('n87-story-editor') || '{}');
     const beforeFont = before?.state?.typography?.fontFamily ?? null;
-    // Open the typography popover (IconButton aria-label="Editor typography").
-    const openBtn = Array.from(document.querySelectorAll('button')).find((b) => (b.getAttribute('aria-label') || '') === 'Editor typography');
-    if (!openBtn) return { found: false };
-    openBtn.click();
-    await new Promise((r) => setTimeout(r, 200));
-    const sans = Array.from(document.querySelectorAll('button')).find((b) => (b.textContent || '').trim() === 'Sans');
-    if (!sans) return { found: true, clickedSans: false };
-    sans.click();
+    // The Font family control is the native <select aria-label="Font family"> in
+    // the toolbar (now in the Manuscript top bar). Pick "sans".
+    const select = document.querySelector('select[aria-label="Font family"]');
+    if (!select) return { found: false };
+    select.value = 'sans';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
     await new Promise((r) => setTimeout(r, 200));
     const after = JSON.parse(localStorage.getItem('n87-story-editor') || '{}');
     const surface = document.querySelector('.n87-prose-editor');
