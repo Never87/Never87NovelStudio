@@ -1,41 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Palette } from 'lucide-react';
+import { Check, Palette, RotateCcw } from 'lucide-react';
 import { Button, IconButton } from '@/components/ui';
 import {
+  LINE_SPACING_MAX,
+  LINE_SPACING_MIN,
+  LINE_SPACING_STEP,
   useStoryEditorStore,
   type EditorAppearance,
-  type EditorFontFamily,
-  type EditorIndent,
-  type EditorLineHeight,
 } from '@/stores/story-editor-store';
 import { cn } from '@/utils/cn';
 
 /**
  * Story Editor typography controls.
  *
- * A small popover (no external dependency) that adjusts the writing surface's
- * font family, size, line spacing, indentation and measure. Every change writes
+ * A small popover (no external dependency). Font family and font size now live
+ * in the editor's minimal TOOLBAR, so this popover only tunes the writing
+ * surface's LOOK — appearance, line spacing and measure. Every change writes
  * straight to the persisted `story-editor-store`, so the choice survives a
  * reload and applies to the SAME editor instance immediately (the CSS variables
- * are read by `.n87-prose-editor`).
+ * are read by `.n87-prose-editor`); the editor is never remounted.
  */
-const FONT_OPTIONS: Array<{ id: EditorFontFamily; label: string }> = [
-  { id: 'serif', label: 'Serif' },
-  { id: 'sans', label: 'Sans' },
-  { id: 'mono', label: 'Mono' },
-];
-
-const LINE_OPTIONS: Array<{ id: EditorLineHeight; label: string }> = [
-  { id: 'compact', label: 'Compact' },
-  { id: 'normal', label: 'Normal' },
-  { id: 'relaxed', label: 'Relaxed' },
-];
-
-const INDENT_OPTIONS: Array<{ id: EditorIndent; label: string }> = [
-  { id: 'none', label: 'Flush' },
-  { id: 'first', label: 'First-line' },
-];
-
 const APPEARANCE_OPTIONS: Array<{ id: EditorAppearance; label: string }> = [
   { id: 'default', label: 'Default' },
   { id: 'warm-paper', label: 'Warm Paper' },
@@ -86,42 +70,58 @@ export function TypographyMenu() {
             onChange={setEditorAppearance}
           />
 
-          <Segmented
-            label="Font"
-            options={FONT_OPTIONS}
-            value={typography.fontFamily}
-            onChange={(fontFamily) => updateTypography({ fontFamily })}
-          />
-
+          {/* Continuous 1.0–2.5 line spacing in 0.1 steps. The numeric value is
+              always displayed so the author can read the exact multiplier. */}
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-subtle text-2xs font-medium uppercase tracking-wide">Size</span>
-              <span className="text-muted text-2xs tabular-nums">{typography.fontSize}px</span>
+              <label
+                htmlFor="n87-line-spacing"
+                className="text-subtle text-2xs font-medium uppercase tracking-wide"
+              >
+                Line spacing
+              </label>
+              <output
+                htmlFor="n87-line-spacing"
+                aria-live="polite"
+                className="text-muted text-2xs tabular-nums"
+              >
+                {typography.lineHeight.toFixed(1)}
+              </output>
             </div>
-            <input
-              type="range"
-              min={13}
-              max={24}
-              step={1}
-              value={typography.fontSize}
-              onChange={(event) => updateTypography({ fontSize: Number(event.target.value) })}
-              aria-label="Font size"
-              className="accent-accent mt-1 w-full"
-            />
+            <div className="mt-1 flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Decrease line spacing"
+                onClick={() =>
+                  updateTypography({ lineHeight: typography.lineHeight - LINE_SPACING_STEP })
+                }
+                className="border-line text-muted hover:bg-surface-muted hover:text-ink grid size-6 shrink-0 place-items-center rounded border text-xs"
+              >
+                −
+              </button>
+              <input
+                id="n87-line-spacing"
+                type="range"
+                min={LINE_SPACING_MIN}
+                max={LINE_SPACING_MAX}
+                step={LINE_SPACING_STEP}
+                value={typography.lineHeight}
+                onChange={(event) => updateTypography({ lineHeight: Number(event.target.value) })}
+                aria-valuetext={`${typography.lineHeight.toFixed(1)} times line spacing`}
+                className="accent-accent w-full"
+              />
+              <button
+                type="button"
+                aria-label="Increase line spacing"
+                onClick={() =>
+                  updateTypography({ lineHeight: typography.lineHeight + LINE_SPACING_STEP })
+                }
+                className="border-line text-muted hover:bg-surface-muted hover:text-ink grid size-6 shrink-0 place-items-center rounded border text-xs"
+              >
+                +
+              </button>
+            </div>
           </div>
-
-          <Segmented
-            label="Line spacing"
-            options={LINE_OPTIONS}
-            value={typography.lineHeight}
-            onChange={(lineHeight) => updateTypography({ lineHeight })}
-          />
-          <Segmented
-            label="Indent"
-            options={INDENT_OPTIONS}
-            value={typography.indent}
-            onChange={(indent) => updateTypography({ indent })}
-          />
 
           <div>
             <div className="flex items-center justify-between">
@@ -145,7 +145,12 @@ export function TypographyMenu() {
           </div>
 
           <div className="border-line flex justify-end border-t pt-2">
-            <Button variant="ghost" size="sm" onClick={resetTypography}>
+            <Button
+              variant="ghost"
+              size="sm"
+              iconLeft={<RotateCcw className="size-3" />}
+              onClick={resetTypography}
+            >
               Reset
             </Button>
           </div>

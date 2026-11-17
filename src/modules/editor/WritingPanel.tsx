@@ -31,6 +31,8 @@ import { ImportExportDialog } from './ImportExportDialog';
 import { ManuscriptNav } from './ManuscriptNav';
 import { StoryPanel } from './StoryPanel';
 import { TypographyMenu } from './TypographyMenu';
+import { EditorToolbar } from './EditorToolbar';
+import { SlashMenu } from './SlashMenu';
 import { ProjectSwitcher } from './ProjectSwitcher';
 import { EditorSurface } from './EditorSurface';
 
@@ -448,6 +450,10 @@ function ChapterEditorSurface({
   const [liveWords, setLiveWords] = useState(0);
   const [versions, setVersions] = useState<DraftVersion[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
+  // Incremented by the toolbar `/` button to ask the slash menu to open at the
+  // caret — the exact same menu that typing `/` opens. Resets on chapter change
+  // because the whole surface is keyed by chapter.
+  const [slashSignal, setSlashSignal] = useState(0);
   // Deferred prose for the Links/Continuity tabs — updated on a short debounce so
   // we never recompute link detection on every keystroke.
   const [prose, setProse] = useState('');
@@ -528,55 +534,83 @@ function ChapterEditorSurface({
 
   return (
     <Card padding="none" className={cn('flex h-full flex-col overflow-hidden', !focusMode && 'min-h-[520px]')}>
-      {/* Editor header: title, counts, autosave status, actions */}
-      <div className="border-line flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="text-subtle shrink-0 text-2xs tabular-nums">{document.chapterOrder + 1}</span>
-          <h3 className="text-ink truncate text-sm font-semibold">{document.title}</h3>
-          {locked ? (
-            <Badge tone="warning" size="sm" dot>
-              <Lock className="mr-1 size-3" aria-hidden />
-              Locked
-            </Badge>
-          ) : null}
+      {/* Editor header — three zones:
+            left  : chapter number + title (+ lock),
+            middle: the minimal formatting toolbar (grows; identical in Normal
+                    and Focus Mode because it lives on the SAME surface),
+            right : word count, autosave status, save + nav + panel actions.
+          The toolbar needs real width, so it drops to its own row on narrow
+          screens (below `lg`) rather than being squeezed. */}
+      <div className="border-line border-b px-4 py-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-subtle shrink-0 text-2xs tabular-nums">{document.chapterOrder + 1}</span>
+            <h3 className="text-ink truncate text-sm font-semibold">{document.title}</h3>
+            {locked ? (
+              <Badge tone="warning" size="sm" dot>
+                <Lock className="mr-1 size-3" aria-hidden />
+                Locked
+              </Badge>
+            ) : null}
+          </div>
+
+          {/* Middle: formatting toolbar. Hidden here below lg; shown on its own
+              row there so every control stays reachable. */}
+          <div className="hidden min-w-0 flex-1 justify-center lg:flex">
+            <EditorToolbar
+              editor={editor}
+              disabled={locked}
+              onOpenSlashMenu={() => setSlashSignal((n) => n + 1)}
+            />
+          </div>
+
+          <div className="ml-auto flex items-center gap-3">
+            <span className="text-subtle text-2xs tabular-nums">
+              {liveWords.toLocaleString()} words
+              {document.projectWordCount > 0 ? (
+                <span className="text-subtle/70"> · project {document.projectWordCount.toLocaleString()}</span>
+              ) : null}
+            </span>
+            <AutosaveIndicator autosave={autosave} onRetry={() => void retry()} />
+            <IconButton
+              label="Save now"
+              icon={<Save className="size-3.5" aria-hidden />}
+              onClick={() => void saveNow()}
+              disabled={locked}
+            />
+            <div className="flex items-center gap-0.5">
+              <IconButton
+                label="Previous chapter"
+                icon={<ChevronLeft className="size-4" aria-hidden />}
+                onClick={() => previous && onOpenChapter(previous.id)}
+                disabled={!previous}
+              />
+              <IconButton
+                label="Next chapter"
+                icon={<ChevronRight className="size-4" aria-hidden />}
+                onClick={() => next && onOpenChapter(next.id)}
+                disabled={!next}
+              />
+            </div>
+            {/* Collapse story panel (desktop) */}
+            <div className="hidden md:block">
+              <IconButton
+                label={aiCollapsed ? 'Show story panel' : 'Hide story panel'}
+                icon={aiCollapsed ? <PanelRight className="size-4" aria-hidden /> : <PanelRight className="size-4 rotate-180" aria-hidden />}
+                onClick={toggleAi}
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-subtle text-2xs tabular-nums">
-            {liveWords.toLocaleString()} words
-            {document.projectWordCount > 0 ? (
-              <span className="text-subtle/70"> · project {document.projectWordCount.toLocaleString()}</span>
-            ) : null}
-          </span>
-          <AutosaveIndicator autosave={autosave} onRetry={() => void retry()} />
-          <IconButton
-            label="Save now"
-            icon={<Save className="size-3.5" aria-hidden />}
-            onClick={() => void saveNow()}
+        {/* Narrow screens: the toolbar gets its own row. */}
+        <div className="mt-1.5 flex lg:hidden">
+          <EditorToolbar
+            editor={editor}
             disabled={locked}
+            onOpenSlashMenu={() => setSlashSignal((n) => n + 1)}
+            className="w-full"
           />
-          <div className="flex items-center gap-0.5">
-            <IconButton
-              label="Previous chapter"
-              icon={<ChevronLeft className="size-4" aria-hidden />}
-              onClick={() => previous && onOpenChapter(previous.id)}
-              disabled={!previous}
-            />
-            <IconButton
-              label="Next chapter"
-              icon={<ChevronRight className="size-4" aria-hidden />}
-              onClick={() => next && onOpenChapter(next.id)}
-              disabled={!next}
-            />
-          </div>
-          {/* Collapse story panel (desktop) */}
-          <div className="hidden md:block">
-            <IconButton
-              label={aiCollapsed ? 'Show story panel' : 'Hide story panel'}
-              icon={aiCollapsed ? <PanelRight className="size-4" aria-hidden /> : <PanelRight className="size-4 rotate-180" aria-hidden />}
-              onClick={toggleAi}
-            />
-          </div>
         </div>
       </div>
 
@@ -589,8 +623,13 @@ function ChapterEditorSurface({
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        {/* Center writing surface — always present; typography applied here. */}
-        <EditorSurface typography={typography} appearance={editorAppearance} className="min-h-0 min-w-0 flex-1">
+        {/* Center writing surface — always present; typography applied here.
+            `relative` anchors the slash menu, which is positioned at the caret. */}
+        <EditorSurface
+          typography={typography}
+          appearance={editorAppearance}
+          className="relative min-h-0 min-w-0 flex-1"
+        >
           <MarkdownEditor
             key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
             editorKey={document.draft.id}
@@ -601,6 +640,9 @@ function ChapterEditorSurface({
             onEditorReady={setEditor}
             className="h-full"
           />
+          {/* Slash menu: opened by typing `/` OR by the toolbar `/` button
+              (`slashSignal`), rendered at the caret over the writing surface. */}
+          <SlashMenu editor={editor} openSignal={slashSignal} />
         </EditorSurface>
 
         {/* Right story panel (desktop inline). Shares the SINGLE editor instance.

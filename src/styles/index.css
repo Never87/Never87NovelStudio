@@ -260,6 +260,12 @@
     max-width: var(--n87-editor-measure, 720px);
     margin-inline: auto;
 
+    /* Fill the scroll area so the empty space BELOW the last paragraph is part
+       of the clickable editing canvas (see click-to-edit). Visual only — it adds
+       no node, break or content and never changes the stored Markdown. */
+    min-height: 100%;
+    outline: none;
+
     /* The core wrap behaviour (visual only). */
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -272,7 +278,6 @@
   /* Paragraph rhythm inside the writing surface. */
   .n87-prose-editor p {
     margin: 0 0 0.85em;
-    text-indent: var(--n87-editor-indent, 0);
   }
   .n87-prose-editor > :first-child {
     margin-top: 0;
@@ -394,5 +399,29 @@
   /* ~18% wash keeps current-paragraph focus visible without a heavy highlight. */
   [data-editor-appearance='warm-paper'] .n87-prose-editor .ProseMirror-focused {
     box-shadow: inset 0 0 0 1px transparent;
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Story Editor — inserted images (Markdown `![alt](src)` round-trips)     */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * Images are inserted as standard Markdown, so they must render safely in the
+   * writing surface and never overflow the measure. `max-width: 100%` keeps a
+   * wide image inside the editor column; `display: block` centres it. This is
+   * purely visual and never touches the stored Markdown.
+   */
+  .n87-prose-editor img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0.75em auto;
+    border-radius: 6px;
+  }
+  .n87-prose-editor img.ProseMirror-selectednode {
+    outline: 2px solid var(--n87-accent);
+    outline-offset: 2px;
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor img {
+    border: 1px solid var(--n87-border-strong);
   }
 }
