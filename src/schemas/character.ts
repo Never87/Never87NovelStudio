@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EvidenceSchema } from './knowledge';
 
 
 /**
@@ -64,6 +65,16 @@ export const CharacterSchema = z
     /** Free-form labels (e.g. "mentor", "sea-folk"). */
     tags: stringListSchema,
 
+    /**
+     * OPTIONAL source provenance (P11 chapter-analysis integration).
+     *
+     * A character integrated from an analysis pass carries grounded evidence
+     * back to the exact chapter prose that supports it, so a claim is traceable
+     * to the manuscript. ADDITIVE + defaulted, so every pre-existing character
+     * (and every hand-authored one) remains valid unchanged.
+     */
+    evidence: z.array(EvidenceSchema).max(50).default([]),
+
     createdAt: timestampSchema,
     updatedAt: timestampSchema,
   })
@@ -80,3 +91,5 @@ export type CharacterRole = z.infer<typeof CharacterRoleSchema>;
 export type CharacterStatus = z.infer<typeof CharacterStatusSchema>;
 /** A persisted character. */
 export type Character = z.infer<typeof CharacterSchema>;
+
+

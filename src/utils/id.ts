@@ -46,6 +46,8 @@ export const ID_PREFIX = {
   // Dashboard fix — writing goals & per-day writing activity.
   writingGoal: 'goal',
   writingActivity: 'act',
+  // P11 — Chapter Analysis runs.
+  chapterAnalysisRun: 'canls',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];
@@ -207,6 +209,11 @@ export function createWritingGoalId(): string {
 /** Convenience wrapper for writing-activity rollup ids (Dashboard fix). */
 export function createWritingActivityId(): string {
   return createId(ID_PREFIX.writingActivity);
+}
+
+/** Convenience wrapper for chapter-analysis run ids (P11). */
+export function createChapterAnalysisRunId(): string {
+  return createId(ID_PREFIX.chapterAnalysisRun);
 }
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import {
   AlertTriangle,
@@ -9,21 +9,30 @@ import {
   Download,
   History,
   Lock,
+  Maximize2,
+  Minimize2,
+  PanelLeft,
+  PanelRight,
   Save,
   Upload,
 } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, IconButton } from '@/components/ui';
 import { useOutline } from '@/hooks';
-import type { DraftVersion } from '@/types';
+import type { Chapter, DraftVersion } from '@/types';
 import { manuscriptService } from '@/services';
 import { cn } from '@/utils/cn';
 import { formatRelative } from '@/utils/date';
 import { countWords, excerpt } from '@/utils/manuscript-text';
+import { useStoryEditorStore, PANEL_WIDTH_BOUNDS } from '@/stores/story-editor-store';
 import { MarkdownEditor } from './MarkdownEditor';
-import { EditorAiAssistant } from '@/modules/ai/EditorAiAssistant';
 import { useChapterEditor } from './use-chapter-editor';
 import { VersionHistoryDialog } from './VersionHistoryDialog';
 import { ImportExportDialog } from './ImportExportDialog';
+import { ManuscriptNav } from './ManuscriptNav';
+import { StoryPanel } from './StoryPanel';
+import { TypographyMenu } from './TypographyMenu';
+import { ProjectSwitcher } from './ProjectSwitcher';
+import { EditorSurface } from './EditorSurface';
 
 export interface WritingPanelProps {
   projectId: string;
@@ -35,30 +44,36 @@ export interface WritingPanelProps {
    * to the first chapter) when the id is not present in the outline.
    */
   initialChapterId?: string | null;
+  /**
+   * Optional handler to switch to a different project. When provided, a compact
+   * in-editor project selector (with "New Project") is shown in the header —
+   * reusing the shared project services. Omitted inside surfaces that already
+   * own a project selector (e.g. the Story Editor route header).
+   */
+  onSwitchProject?: (projectId: string) => void;
 }
 
 /**
- * Writing tab (P4): the chapter manuscript editor.
+ * Writing tab (P4 → upgraded): the three-panel story writing workspace.
  *
- * Layout: a chapter list on the left (prose progress per chapter), the editor
- * on the right with a live word count and autosave status in the header.
+ * Layout (Normal mode): Manuscript panel (left) · editor (center, largest) ·
+ * Story panel (right: AI / Links / Continuity / Ideas). Both side panels are
+ * independently collapsible and resizable, returning space to the center when
+ * collapsed. Focus Mode hides global chrome (via the shell) and peripheral UI,
+ * keeping the SAME editor instance and data state — nothing is remounted.
  *
  * The editor never owns persistence — every keystroke goes through
  * `useChapterEditor`, which debounces, serialises and revision-checks the save.
  */
-export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps) {
+export function WritingPanel({ projectId, initialChapterId, onSwitchProject }: WritingPanelProps) {
   const { outline, status: outlineStatus, loading, refresh: refreshOutline } = useOutline(projectId);
-  // Seed with the requested deep-link chapter (if any); the effect below falls
-  // back to the first chapter only when nothing is selected yet.
   const [chapterId, setChapterId] = useState<string | null>(initialChapterId ?? null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
 
   const chapters = outline.flatMap((entry) => entry.chapters);
 
-  // If a deep-link chapter was requested, open it once the outline has loaded
-  // and only if it actually belongs to this project. Runs before the
-  // "open first chapter" default so the requested chapter wins.
+  // Select the requested deep-link chapter once the outline has loaded.
   useEffect(() => {
     if (!initialChapterId) return;
     if (chapters.length === 0) return;
@@ -79,12 +94,15 @@ export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps)
     }
   }, [chapterId, chapters]);
 
+  // Reset focus mode when this panel unmounts (e.g. navigating away), so the
+  // shell never stays chromeless after leaving the editor.
+  const setFocusMode = useStoryEditorStore((state) => state.setFocusMode);
+  useEffect(() => () => setFocusMode(false), [setFocusMode]);
+
   if (outlineStatus === 'error') {
     return (
       <Card padding="lg">
-        <p className="text-muted text-sm">
-          The outline could not be loaded, so the editor is unavailable.
-        </p>
+        <p className="text-muted text-sm">The outline could not be loaded, so the editor is unavailable.</p>
       </Card>
     );
   }
@@ -105,22 +123,35 @@ export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps)
         <EmptyState
           icon={<BookOpen className="size-5" aria-hidden />}
           title="No chapters to write yet"
-          description="The editor writes into chapters. Create a chapter in the Outline tab first — or import a Markdown draft to create them in bulk."
+          description="Create a volume and chapter in the panel to start writing — or import a Markdown draft to create them in bulk."
           action={
-            <Button
-              variant="secondary"
-              size="sm"
-              iconLeft={<Upload className="size-3.5" />}
-              onClick={() => setTransferOpen(true)}
-            >
-              Import Markdown
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<Upload className="size-3.5" />}
+                onClick={() => setTransferOpen(true)}
+              >
+                Import Markdown
+              </Button>
+            </div>
           }
         />
-        {/* The dialog MUST be mounted in the empty state too, otherwise the
-            button only flips state and nothing appears. Import works with no
-            chapters: the dialog creates a default volume when the project has
-            none, then writes the chapters. */}
+        {/* The in-editor creator is still available so an empty project can be
+            started without leaving the editor. */}
+        <div className="mx-auto max-w-xs">
+          <ManuscriptNav
+            projectId={projectId}
+            outline={outline}
+            activeChapterId={chapterId}
+            onSelectChapter={setChapterId}
+            onChanged={(selectId) => {
+              void refreshOutline().then(() => {
+                if (selectId) setChapterId(selectId);
+              });
+            }}
+          />
+        </div>
         <ImportExportDialog
           open={transferOpen}
           projectId={projectId}
@@ -132,122 +163,265 @@ export function WritingPanel({ projectId, initialChapterId }: WritingPanelProps)
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-ink text-sm font-semibold">Manuscript</h2>
-          <span className="text-subtle text-2xs">{chapters.length} chapters</span>
+    <Workspace
+      projectId={projectId}
+      outline={outline}
+      chapters={chapters}
+      chapterId={chapterId}
+      onSelectChapter={setChapterId}
+      onOutlineChanged={(selectId) => {
+        void refreshOutline().then(() => {
+          if (selectId) setChapterId(selectId);
+        });
+      }}
+      historyOpen={historyOpen}
+      onHistoryOpenChange={setHistoryOpen}
+      transferOpen={transferOpen}
+      onTransferOpenChange={setTransferOpen}
+      onSwitchProject={onSwitchProject}
+    />
+  );
+}
+
+/* ------------------------------- Workspace ------------------------------- */
+
+interface WorkspaceProps {
+  projectId: string;
+  outline: ReturnType<typeof useOutline>['outline'];
+  chapters: Chapter[];
+  chapterId: string | null;
+  onSelectChapter: (id: string) => void;
+  onOutlineChanged: (selectId?: string) => void;
+  historyOpen: boolean;
+  onHistoryOpenChange: (open: boolean) => void;
+  transferOpen: boolean;
+  onTransferOpenChange: (open: boolean) => void;
+  onSwitchProject?: (id: string) => void;
+}
+
+/**
+ * The three-panel workspace shell. Owns the responsive/collapsible/resizable
+ * layout and Focus Mode. The center editor + right Story panel live in
+ * `ChapterEditorSurface`, which renders the SINGLE editor instance regardless of
+ * mode — toggling Focus Mode only changes surrounding chrome, never the editor.
+ */
+function Workspace({
+  projectId,
+  outline,
+  chapters,
+  chapterId,
+  onSelectChapter,
+  onOutlineChanged,
+  historyOpen,
+  onHistoryOpenChange,
+  transferOpen,
+  onTransferOpenChange,
+  onSwitchProject,
+}: WorkspaceProps) {
+  const manuscriptCollapsed = useStoryEditorStore((s) => s.manuscriptCollapsed);
+  const manuscriptWidth = useStoryEditorStore((s) => s.manuscriptWidth);
+  const toggleManuscript = useStoryEditorStore((s) => s.toggleManuscript);
+  const setManuscriptWidth = useStoryEditorStore((s) => s.setManuscriptWidth);
+  const focusMode = useStoryEditorStore((s) => s.focusMode);
+  const toggleFocusMode = useStoryEditorStore((s) => s.toggleFocusMode);
+
+  // Mobile drawers: on small screens the side panels become overlay drawers.
+  const [mobileManuscriptOpen, setMobileManuscriptOpen] = useState(false);
+  const [mobileAiOpen, setMobileAiOpen] = useState(false);
+
+  // Track the viewport so panels use the VISUAL viewport height on mobile, so
+  // the on-screen keyboard never covers the writing area (not just innerHeight).
+  useVisualViewportHeight();
+
+  const activeChapter = chapters.find((chapter) => chapter.id === chapterId) ?? null;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Compact header: title + actions, no oversized chrome. */}
+      <div className="border-line flex flex-wrap items-center justify-between gap-2 pb-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Mobile panel toggles */}
+          <div className="flex items-center gap-0.5 md:hidden">
+            <IconButton
+              label="Manuscript panel"
+              icon={<PanelLeft className="size-4" aria-hidden />}
+              onClick={() => setMobileManuscriptOpen(true)}
+            />
+            <IconButton
+              label="Story panel"
+              icon={<PanelRight className="size-4" aria-hidden />}
+              onClick={() => setMobileAiOpen(true)}
+            />
+          </div>
+          <h2 className="text-ink shrink-0 text-sm font-semibold">Manuscript</h2>
+          <span className="text-subtle shrink-0 text-2xs">{chapters.length} chapters</span>
+          {onSwitchProject ? (
+            <ProjectSwitcher
+              currentProjectId={projectId}
+              onSwitchProject={onSwitchProject}
+              className="hidden sm:block"
+            />
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-1.5">
+          <TypographyMenu />
           <Button
             variant="ghost"
             size="sm"
             iconLeft={<History className="size-3.5" />}
-            onClick={() => setHistoryOpen(true)}
+            onClick={() => onHistoryOpenChange(true)}
             disabled={!chapterId}
           >
-            Versions
+            <span className="hidden sm:inline">Versions</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             iconLeft={<Download className="size-3.5" />}
-            onClick={() => setTransferOpen(true)}
+            onClick={() => onTransferOpenChange(true)}
           >
-            Import / Export
+            <span className="hidden sm:inline">Import / Export</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            iconLeft={focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            onClick={toggleFocusMode}
+            aria-pressed={focusMode}
+          >
+            <span className="hidden sm:inline">{focusMode ? 'Exit Focus' : 'Focus'}</span>
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
-        <ChapterNav
-          outline={outline}
-          activeChapterId={chapterId}
-          onSelect={(id) => setChapterId(id)}
-        />
-        {chapterId ? (
-          <ChapterEditorSurface
+      {/* Three panels */}
+      <div className="flex min-h-0 flex-1 gap-0">
+        {/* Left: manuscript (desktop inline, resizable/collapsible) */}
+        <div
+          className="hidden shrink-0 md:block"
+          style={{ width: manuscriptCollapsed ? undefined : manuscriptWidth }}
+        >
+          <ManuscriptNav
             projectId={projectId}
-            chapterId={chapterId}
-            siblings={chapters}
-            onOpenChapter={setChapterId}
-            historyOpen={historyOpen}
-            onHistoryOpenChange={setHistoryOpen}
+            outline={outline}
+            activeChapterId={chapterId}
+            onSelectChapter={onSelectChapter}
+            onChanged={onOutlineChanged}
+            collapsed={manuscriptCollapsed}
+            onToggleCollapsed={toggleManuscript}
+          />
+        </div>
+        {!manuscriptCollapsed ? (
+          <Resizer
+            label="Resize manuscript panel"
+            onDelta={(dx) => setManuscriptWidth(manuscriptWidth + dx)}
+            getWidth={() => manuscriptWidth}
+            min={PANEL_WIDTH_BOUNDS.min}
+            max={PANEL_WIDTH_BOUNDS.max}
           />
         ) : null}
+
+        {/* Center editor — owns its own right story panel + resize handle so the
+            panel can share the live editor instance (no remount on toggle). */}
+        <div className="min-w-0 flex-1">
+          {chapterId ? (
+            <ChapterEditorSurface
+              projectId={projectId}
+              chapterId={chapterId}
+              activeChapter={activeChapter}
+              siblings={chapters}
+              onOpenChapter={onSelectChapter}
+              historyOpen={historyOpen}
+              onHistoryOpenChange={onHistoryOpenChange}
+            />
+          ) : null}
+        </div>
       </div>
+
+      {/* Mobile drawers */}
+      <MobileDrawer
+        open={mobileManuscriptOpen}
+        side="left"
+        onClose={() => setMobileManuscriptOpen(false)}
+        title="Manuscript"
+      >
+        <ManuscriptNav
+          projectId={projectId}
+          outline={outline}
+          activeChapterId={chapterId}
+          onSelectChapter={(id) => {
+            onSelectChapter(id);
+            setMobileManuscriptOpen(false);
+          }}
+          onChanged={onOutlineChanged}
+        />
+      </MobileDrawer>
+      <MobileDrawer open={mobileAiOpen} side="right" onClose={() => setMobileAiOpen(false)} title="Story panel">
+        {chapterId ? (
+          <ChapterStoryRail projectId={projectId} activeChapter={activeChapter} />
+        ) : null}
+      </MobileDrawer>
 
       <ImportExportDialog
         open={transferOpen}
         projectId={projectId}
-        onClose={() => setTransferOpen(false)}
-        onImported={() => void refreshOutline()}
+        onClose={() => onTransferOpenChange(false)}
+        onImported={() => onOutlineChanged()}
       />
     </div>
   );
 }
 
-/** Left rail: volumes, their chapters, and per-chapter prose progress. */
-function ChapterNav({
-  outline,
-  activeChapterId,
-  onSelect,
+/**
+ * The right rail wrapper. It needs the live editor + prose, which live in
+ * `ChapterEditorSurface`. To avoid lifting the editor into the Workspace (which
+ * would re-render the editor on every layout change), the StoryPanel is rendered
+ * INSIDE `ChapterEditorSurface`. This rail is the desktop container only; it
+ * renders a placeholder that the surface portals into is overkill — instead we
+ * share state via a small context-free approach: the surface renders the
+ * StoryPanel in its own right-hand slot.
+ *
+ * To keep a single source of truth we render the Desktop StoryPanel inside the
+ * surface (see `ChapterEditorSurface`'s `desktopRail`), and this component is
+ * used only for the MOBILE drawer, where it recomputes the same data.
+ */
+function ChapterStoryRail({
+  projectId,
+  activeChapter,
+  aiCollapsed,
+  toggleAi,
 }: {
-  outline: ReturnType<typeof useOutline>['outline'];
-  activeChapterId: string | null;
-  onSelect: (chapterId: string) => void;
+  projectId: string;
+  activeChapter: Chapter | null;
+  aiCollapsed?: boolean;
+  toggleAi?: () => void;
 }) {
+  // The desktop rail needs editor + prose; those are provided by the surface.
+  // This fallback rail (mobile drawer) does not have the editor instance, so it
+  // renders the panel with a null editor — AI actions degrade gracefully while
+  // Links/Continuity/Ideas remain fully functional.
+  if (!activeChapter) return null;
   return (
-    <Card padding="sm" className="h-fit">
-      <div className="space-y-3">
-        {outline.map(({ volume, chapters }) => (
-          <div key={volume.id}>
-            <p className="text-subtle mb-1 truncate text-2xs font-medium uppercase tracking-wide">
-              {volume.title}
-            </p>
-            <ul className="space-y-0.5">
-              {chapters.map((chapter) => {
-                const active = chapter.id === activeChapterId;
-                const locked = chapter.status === 'final';
-                return (
-                  <li key={chapter.id}>
-                    <button
-                      type="button"
-                      onClick={() => onSelect(chapter.id)}
-                      aria-current={active ? 'true' : undefined}
-                      className={cn(
-                        'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors',
-                        active
-                          ? 'bg-accent/10 text-ink font-medium'
-                          : 'text-muted hover:bg-surface-muted hover:text-ink',
-                      )}
-                    >
-                      <span className="text-subtle w-4 shrink-0 tabular-nums">
-                        {chapter.order + 1}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate">{chapter.title}</span>
-                      {locked ? (
-                        <Lock className="text-subtle size-3 shrink-0" aria-label="Locked" />
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-              {chapters.length === 0 ? (
-                <li className="text-subtle px-2 text-2xs italic">Empty volume</li>
-              ) : null}
-            </ul>
-          </div>
-        ))}
-      </div>
-    </Card>
+    <StoryPanel
+      projectId={projectId}
+      chapter={activeChapter}
+      prose=""
+      editor={null}
+      chapterTitle={activeChapter.title}
+      locked={activeChapter.status === 'final'}
+      collapsed={aiCollapsed}
+      onToggleCollapsed={toggleAi}
+    />
   );
 }
 
-/** Editor + header for the open chapter. */
+/* --------------------------- Chapter editor ------------------------------ */
+
 function ChapterEditorSurface({
   projectId,
   chapterId,
+  activeChapter,
   siblings,
   onOpenChapter,
   historyOpen,
@@ -255,23 +429,34 @@ function ChapterEditorSurface({
 }: {
   projectId: string;
   chapterId: string;
+  activeChapter: Chapter | null;
   siblings: Array<{ id: string; title: string }>;
   onOpenChapter: (chapterId: string) => void;
   historyOpen: boolean;
   onHistoryOpenChange: (open: boolean) => void;
 }) {
-
-  const { document, status, error, autosave, onChange, saveNow, retry, reload, createVersion, restoreVersion } =
+  const { document, status, error, autosave, onChange, saveNow, flushBeforeAnalysis, retry, reload, createVersion, restoreVersion } =
     useChapterEditor(projectId, chapterId);
+  const typography = useStoryEditorStore((s) => s.typography);
+  const focusMode = useStoryEditorStore((s) => s.focusMode);
+  const aiCollapsed = useStoryEditorStore((s) => s.aiCollapsed);
+  const aiWidth = useStoryEditorStore((s) => s.aiWidth);
+  const toggleAi = useStoryEditorStore((s) => s.toggleAi);
+  const setAiWidth = useStoryEditorStore((s) => s.setAiWidth);
 
-  // Live counter mirrors the derived count the Service will persist, so the
-  // number on screen and the number stored always agree.
   const [liveWords, setLiveWords] = useState(0);
   const [versions, setVersions] = useState<DraftVersion[]>([]);
   const [editor, setEditor] = useState<Editor | null>(null);
+  // Deferred prose for the Links/Continuity tabs — updated on a short debounce so
+  // we never recompute link detection on every keystroke.
+  const [prose, setProse] = useState('');
+  const proseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (document) setLiveWords(document.draft.wordCount);
+    if (document) {
+      setLiveWords(document.draft.wordCount);
+      setProse(document.draft.content);
+    }
   }, [document]);
 
   useEffect(() => {
@@ -289,6 +474,13 @@ function ChapterEditorSurface({
       cancelled = true;
     };
   }, [document, autosave.lastSavedAt]);
+
+  // Cleanup the prose debounce on unmount.
+  useEffect(() => {
+    return () => {
+      if (proseTimer.current) clearTimeout(proseTimer.current);
+    };
+  }, []);
 
   if (status === 'not-found') {
     return (
@@ -324,20 +516,21 @@ function ChapterEditorSurface({
   const previous = index > 0 ? siblings[index - 1] : null;
   const next = index >= 0 && index < siblings.length - 1 ? siblings[index + 1] : null;
   const locked = document.locked;
+  const storyChapter: Chapter | null = activeChapter;
 
   const handleChange = (markdown: string) => {
     onChange(markdown);
     setLiveWords(countWords(markdown));
+    if (proseTimer.current) clearTimeout(proseTimer.current);
+    proseTimer.current = setTimeout(() => setProse(markdown), 500);
   };
 
   return (
-    <Card padding="none" className="flex min-h-[520px] flex-col overflow-hidden">
+    <Card padding="none" className={cn('flex h-full flex-col overflow-hidden', !focusMode && 'min-h-[520px]')}>
       {/* Editor header: title, counts, autosave status, actions */}
       <div className="border-line flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="text-subtle shrink-0 text-2xs tabular-nums">
-            {document.chapterOrder + 1}
-          </span>
+          <span className="text-subtle shrink-0 text-2xs tabular-nums">{document.chapterOrder + 1}</span>
           <h3 className="text-ink truncate text-sm font-semibold">{document.title}</h3>
           {locked ? (
             <Badge tone="warning" size="sm" dot>
@@ -375,6 +568,14 @@ function ChapterEditorSurface({
               disabled={!next}
             />
           </div>
+          {/* Collapse story panel (desktop) */}
+          <div className="hidden md:block">
+            <IconButton
+              label={aiCollapsed ? 'Show story panel' : 'Hide story panel'}
+              icon={aiCollapsed ? <PanelRight className="size-4" aria-hidden /> : <PanelRight className="size-4 rotate-180" aria-hidden />}
+              onClick={toggleAi}
+            />
+          </div>
         </div>
       </div>
 
@@ -386,20 +587,47 @@ function ChapterEditorSurface({
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <MarkdownEditor
-          key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
-          editorKey={document.draft.id}
-          value={document.draft.content}
-          onChange={handleChange}
-          editable={!locked}
-          onSaveShortcut={() => void saveNow()}
-          onEditorReady={setEditor}
-          className="min-h-0 flex-1"
-        />
-        <aside className="border-line w-full shrink-0 border-t p-3 lg:w-64 lg:border-t-0 lg:border-l">
-          <EditorAiAssistant editor={editor} chapterTitle={document.title} locked={locked} />
-        </aside>
+      <div className="flex min-h-0 flex-1">
+        {/* Center writing surface — always present; typography applied here. */}
+        <EditorSurface typography={typography} className="min-h-0 min-w-0 flex-1">
+          <MarkdownEditor
+            key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
+            editorKey={document.draft.id}
+            value={document.draft.content}
+            onChange={handleChange}
+            editable={!locked}
+            onSaveShortcut={() => void saveNow()}
+            onEditorReady={setEditor}
+            className="h-full"
+          />
+        </EditorSurface>
+
+        {/* Right story panel (desktop inline). Shares the SINGLE editor instance.
+            A resize handle lets the author trade space between prose and panel. */}
+        {!aiCollapsed && storyChapter ? (
+          <Resizer
+            label="Resize story panel"
+            onDelta={(dx) => setAiWidth(aiWidth - dx)}
+            getWidth={() => aiWidth}
+            min={PANEL_WIDTH_BOUNDS.min}
+            max={PANEL_WIDTH_BOUNDS.max}
+          />
+        ) : null}
+        {!aiCollapsed && storyChapter ? (
+          <div className="border-line hidden shrink-0 border-l md:block" style={{ width: aiWidth }}>
+            <StoryPanel
+              projectId={projectId}
+              chapter={storyChapter}
+              prose={prose}
+              editor={editor}
+              chapterTitle={document.title}
+              locked={locked}
+              collapsed={false}
+              onToggleCollapsed={undefined}
+              beforeAnalyze={flushBeforeAnalysis}
+            />
+          </div>
+        ) : null}
       </div>
 
       <VersionHistoryDialog
@@ -411,8 +639,6 @@ function ChapterEditorSurface({
           await createVersion(label);
         }}
         onRestore={async (versionId) => {
-          // Hook flushes pending autosave, restores, rebinds the engine and
-          // reloads — so a queued save can never overwrite the restored text.
           await restoreVersion(versionId);
         }}
       />
@@ -420,7 +646,152 @@ function ChapterEditorSurface({
   );
 }
 
-/** Compact autosave pill: saved / saving / unsaved / error. */
+/* ------------------------------- Resizer --------------------------------- */
+
+/**
+ * A thin drag handle that reports horizontal drag deltas. Uses pointer events so
+ * it works with mouse, pen and touch. Keyboard users can nudge with arrow keys.
+ */
+function Resizer({
+  label,
+  onDelta,
+  getWidth,
+  min,
+  max,
+}: {
+  label: string;
+  onDelta: (dx: number) => void;
+  getWidth: () => number;
+  min: number;
+  max: number;
+}) {
+  const dragging = useRef(false);
+  const lastX = useRef(0);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragging.current = true;
+    lastX.current = event.clientX;
+    (event.target as HTMLElement).setPointerCapture(event.pointerId);
+  };
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    const dx = event.clientX - lastX.current;
+    lastX.current = event.clientX;
+    onDelta(dx);
+  };
+  const end = (event: React.PointerEvent<HTMLDivElement>) => {
+    dragging.current = false;
+    try {
+      (event.target as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {
+      /* pointer already released */
+    }
+  };
+
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onKeyDown={(event) => {
+        const step = 16;
+        if (event.key === 'ArrowLeft') onDelta(-step);
+        else if (event.key === 'ArrowRight') onDelta(step);
+        else return;
+        event.preventDefault();
+      }}
+      className="group hidden w-1.5 shrink-0 cursor-col-resize items-stretch md:flex"
+      title={label}
+    >
+      <span className="bg-line group-hover:bg-accent group-focus-visible:bg-accent mx-auto my-1 w-px rounded transition-colors" />
+      <span className="sr-only">
+        Current width {Math.round(getWidth())} pixels, between {min} and {max}.
+      </span>
+    </div>
+  );
+}
+
+/* --------------------------- Mobile drawer ------------------------------- */
+
+function MobileDrawer({
+  open,
+  side,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  side: 'left' | 'right';
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  // Do not mount the drawer (or its expensive children) until it is opened.
+  // Otherwise a second StoryPanel would live in the DOM on desktop, duplicating
+  // tab roles and data queries behind a hidden overlay.
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-40 md:hidden">
+      <div onClick={onClose} className="absolute inset-0 bg-[#0b1220]/50" />
+      <div
+        className={cn(
+          'bg-surface absolute inset-y-0 w-[80vw] max-w-xs shadow-[var(--n87-shadow-popover)]',
+          side === 'left' ? 'left-0' : 'right-0',
+        )}
+      >
+        <div className="border-line flex items-center justify-between border-b px-3 py-2">
+          <h2 className="text-ink text-xs font-semibold">{title}</h2>
+          <IconButton label="Close" icon={<ChevronLeft className="size-4" aria-hidden />} onClick={onClose} />
+        </div>
+        <div className="h-[calc(100%-2.5rem)] p-2">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Visual viewport ---------------------------- */
+
+/**
+ * Sets a CSS variable `--n87-vvh` to the VISUAL viewport height and keeps it in
+ * sync with `window.visualViewport` (so a mobile keyboard shrinking the viewport
+ * is honoured). The writing area can then size against `--n87-vvh` instead of a
+ * static `innerHeight`, which keeps the editor visible above the keyboard.
+ */
+function useVisualViewportHeight() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      document.documentElement.style.setProperty('--n87-vvh', `${vv.height}px`);
+    };
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      document.documentElement.style.removeProperty('--n87-vvh');
+    };
+  }, []);
+}
+
+/* --------------------------- Autosave pill ------------------------------- */
+
 function AutosaveIndicator({
   autosave,
   onRetry,

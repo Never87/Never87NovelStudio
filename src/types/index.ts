@@ -198,3 +198,25 @@ export {
   MAX_DAILY_WORD_TARGET,
 } from '@/schemas/writing-goal';
 export type { WritingActivity } from '@/schemas/writing-activity';
+
+/* --------------------------- P11 — Chapter Analysis ----------------------- */
+export type {
+  ChapterAnalysisRun,
+  ChapterAnalysisEntity,
+  ChapterAnalysisRelationship,
+  AnalysisEntityStatus,
+  AnalysisRunOrigin,
+  AnalysisEvidence,
+  AnalysisIntegrationStatus,
+  AnalysisCanonicalType,
+  AnalysisIntegrationState,
+} from '@/schemas/chapter-analysis';
+export {
+  ANALYSIS_ENTITY_STATUSES,
+  ANALYSIS_RUN_ORIGINS,
+  ANALYSIS_ENTITY_KINDS,
+  ANALYSIS_INTEGRATION_STATUSES,
+  ANALYSIS_CANONICAL_TYPES,
+  normalizeCandidateName,
+  buildEntityKey,
+} from '@/schemas/chapter-analysis';

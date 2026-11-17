@@ -6,6 +6,7 @@ import type {
   AiTaskConfig,
   AnalysisFinding,
   Chapter,
+  ChapterAnalysisRun,
   ChapterDraft,
   Character,
   ContextConfig,
@@ -100,6 +101,8 @@ export class NovelStudioDb extends Dexie {
   writingGoals!: Table<WritingGoal, string>;
   /** Per-project, per-day writing-activity rollups (Dashboard fix). */
   writingActivity!: Table<WritingActivity, string>;
+  /** Chapter-analysis runs (fingerprinted, re-runnable) — many per project (P11). */
+  chapterAnalysisRuns!: Table<ChapterAnalysisRun, string>;
 
   constructor(name = 'never87-novel-studio') {
     super(name);
@@ -679,6 +682,60 @@ export class NovelStudioDb extends Dexie {
       portfolioProfiles: '&id, &projectId, updatedAt',
       writingGoals: '&id, scope',
       writingActivity: '&id, projectId, [projectId+dateKey], dateKey',
+    });
+
+    // v17 — Chapter Analysis runs (P11).
+    //   chapterAnalysisRuns: &id, projectId, [projectId+chapterId], [projectId+chapterId+contentFingerprint], updatedAt
+    //                        -> projectId isolates a project's runs (every query
+    //                           is scoped by it); the compound
+    //                           [projectId+chapterId] index lists a chapter's runs
+    //                           for the re-analysis history; the compound
+    //                           [projectId+chapterId+contentFingerprint] backs the
+    //                           FINGERPRINT IDEMPOTENCY lookup (re-running an
+    //                           unchanged chapter finds the existing run instead
+    //                           of inserting a duplicate); updatedAt orders runs.
+    //                        The `entities`/`relationships`/`modelTarget` fields
+    //                        are nested objects and are NOT indexed (list views
+    //                        read the whole run).
+    //
+    // Purely ADDITIVE and DATA-PRESERVING: every v1-v16 store is restated
+    // verbatim; the only change is the new empty `chapterAnalysisRuns` store. No
+    // existing row is added, removed or mutated by the migration. Analysis runs
+    // are DERIVED, re-runnable metadata and are EXCLUDED from the JSON transfer
+    // payload (like projectSnapshots), but they ARE project-owned and are
+    // INCLUDED in the project-delete cascade so no run outlives its project.
+    this.version(17).stores({
+      projects: '&id, title, status, createdAt, updatedAt',
+      worlds: '&id, &projectId, updatedAt',
+      characters: '&id, projectId, name, createdAt, updatedAt',
+      narrativePlans: '&id, &projectId, status, updatedAt',
+      volumes: '&id, projectId, updatedAt',
+      chapters: '&id, projectId, volumeId, [volumeId+order], status, updatedAt',
+      scenes: '&id, projectId, chapterId, [chapterId+order], status, updatedAt',
+      chapterDrafts: '&id, &ownerId, projectId, updatedAt',
+      sceneDrafts: '&id, &ownerId, projectId, updatedAt',
+      draftVersions: '&id, draftId, projectId, [draftId+revision], createdAt',
+      aiProviders: '&id, providerType, enabled, updatedAt',
+      aiModels: '&id, providerId, [providerId+modelId], enabled',
+      aiTaskConfigs: '&task',
+      aiGlobalConfig: '&id',
+      promptTemplates: '&id, projectId, category, taskKind, updatedAt',
+      promptTemplateVersions: '&id, templateId, projectId, [templateId+version], createdAt',
+      contextItems: '&id, projectId, layer, updatedAt',
+      contextConfigs: '&id, &projectId, updatedAt',
+      knowledgeEntries: '&id, projectId, kind, source, updatedAt, [projectId+sourceKey]',
+      continuityFacts: '&id, projectId, [projectId+anchorChapterId], subjectId, predicate, updatedAt',
+      analysisFindings: '&id, projectId, category, status, updatedAt',
+      sourceDocuments: '&id, projectId, status, updatedAt',
+      documentSections: '&id, projectId, documentId, [documentId+order], parentId',
+      extractionRecords: '&id, projectId, documentId, kind, reviewStatus, updatedAt, &[projectId+dedupeKey]',
+      projectSnapshots: '&id, projectId, [projectId+createdAt], createdAt',
+      coverAssets: '&id, projectId, createdAt',
+      portfolioProfiles: '&id, &projectId, updatedAt',
+      writingGoals: '&id, scope',
+      writingActivity: '&id, projectId, [projectId+dateKey], dateKey',
+      chapterAnalysisRuns:
+        '&id, projectId, [projectId+chapterId], [projectId+chapterId+contentFingerprint], updatedAt',
     });
   }
 }

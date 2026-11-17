@@ -64,10 +64,10 @@ export function MarkdownEditor({
       autofocus: autoFocus ? 'end' : false,
       editorProps: {
         attributes: {
-          class: cn(
-            'prose-editor focus:outline-none',
-            'max-w-none text-[15px] leading-7 text-ink',
-          ),
+          // `n87-prose-editor` owns the writing-surface styles: always-on
+          // visual word wrap, typography driven by CSS variables and long-word
+          // safety. It never alters the ProseMirror document (wrap is visual).
+          class: cn('n87-prose-editor text-ink focus:outline-none'),
           'aria-label': ariaLabel,
           spellcheck: 'true',
         },

@@ -25,6 +25,7 @@ import { SnapshotRepository } from '@/repositories/snapshot-repository';
 import { CoverRepository } from '@/repositories/cover-repository';
 import { PortfolioProfileRepository } from '@/repositories/portfolio-profile-repository';
 import { WritingActivityRepository } from '@/repositories/writing-activity-repository';
+import { ChapterAnalysisRepository } from '@/repositories/chapter-analysis-repository';
 
 /** Base error for business-rule failures raised by the Service. */
 export class ProjectServiceError extends Error {
@@ -110,6 +111,7 @@ export class ProjectService {
   private readonly coverRepository: CoverRepository;
   private readonly portfolioProfileRepository: PortfolioProfileRepository;
   private readonly writingActivityRepository: WritingActivityRepository;
+  private readonly chapterAnalysisRepository: ChapterAnalysisRepository;
 
   constructor(
     repository: ProjectRepository = new ProjectRepository(),
@@ -133,6 +135,8 @@ export class ProjectService {
     portfolioProfileRepository: PortfolioProfileRepository = new PortfolioProfileRepository(),
     // Dashboard fix: per-project daily writing-activity rollups are project-owned.
     writingActivityRepository: WritingActivityRepository = new WritingActivityRepository(),
+    // P11: chapter-analysis runs are project-owned derived metadata.
+    chapterAnalysisRepository: ChapterAnalysisRepository = new ChapterAnalysisRepository(),
   ) {
     this.repository = repository;
     this.worldRepository = worldRepository;
@@ -151,6 +155,7 @@ export class ProjectService {
     this.coverRepository = coverRepository;
     this.portfolioProfileRepository = portfolioProfileRepository;
     this.writingActivityRepository = writingActivityRepository;
+    this.chapterAnalysisRepository = chapterAnalysisRepository;
   }
 
   /**
@@ -328,6 +333,9 @@ export class ProjectService {
       // Dashboard fix: per-project daily writing-activity rollups must not
       // outlive their project (deleted before the project row, child-first).
       await this.writingActivityRepository.deleteByProjectId(id);
+      // P11: chapter-analysis runs are project-owned derived metadata and must
+      // not outlive their project (deleted before the project row, child-first).
+      await this.chapterAnalysisRepository.deleteByProjectId(id);
       // 2. Then the project itself.
       await this.repository.delete(id);
     } catch (error) {

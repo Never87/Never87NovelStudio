@@ -34,6 +34,14 @@ export interface UseChapterEditorResult {
   onChange: (markdown: string) => void;
   /** Force an immediate save (Ctrl+S / blur). */
   saveNow: () => Promise<void>;
+  /**
+   * Flush pending autosave and CONFIRM it succeeded, for a caller that MUST NOT
+   * proceed on stale text (e.g. "analyze this chapter" reads the persisted
+   * draft). Unlike `saveNow`, this REJECTS with an actionable error when the
+   * latest text could not be persisted, so the caller can abort instead of
+   * analysing older prose. It performs no save when nothing is pending.
+   */
+  flushBeforeAnalysis: () => Promise<void>;
   /** Re-send after a failure. */
   retry: () => Promise<void>;
   /** Reload from the database, discarding local state. */
@@ -187,6 +195,29 @@ export function useChapterEditor(
     await engineRef.current?.flush();
   }, []);
 
+  /**
+   * Save-first gate for "analyze": flush, then verify the flush actually
+   * persisted. `AutosaveEngine.flush()` resolves even when a write FAILED (the
+   * engine records the failure in its snapshot and keeps the text dirty rather
+   * than throwing), so we must inspect the post-flush snapshot. If the text
+   * still could not be saved we reject with an actionable error so the caller
+   * never analyses stale prose.
+   */
+  const flushBeforeAnalysis = useCallback(async () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    await engine.flush();
+    const snapshot = engine.snapshot();
+    if (snapshot.status === 'error' || snapshot.dirty) {
+      const cause = snapshot.error instanceof Error ? snapshot.error : null;
+      throw new Error(
+        'Your latest changes could not be saved, so analysis was not started. ' +
+          'Fix the save error (see the autosave status) and try again.' +
+          (cause?.message ? ` (${cause.message})` : ''),
+      );
+    }
+  }, []);
+
   const retry = useCallback(async () => {
     await engineRef.current?.retry();
   }, []);
@@ -278,6 +309,7 @@ export function useChapterEditor(
       autosave,
       onChange,
       saveNow,
+      flushBeforeAnalysis,
       retry,
       reload,
       createVersion,
@@ -290,6 +322,7 @@ export function useChapterEditor(
       autosave,
       onChange,
       saveNow,
+      flushBeforeAnalysis,
       retry,
       reload,
       createVersion,

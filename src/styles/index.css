@@ -231,4 +231,66 @@
     background-size: 28px 28px;
     mask-image: radial-gradient(ellipse at top, black 10%, transparent 72%);
   }
+
+  /*
+   * Story Editor writing surface.
+   *
+   * VISUAL WORD WRAP is mandatory and always-on: prose wraps at the editor
+   * width instead of scrolling horizontally. The wrapping is purely visual —
+   * it changes no ProseMirror node, inserts no line break, and does not affect
+   * word count, paragraph structure, saving or export. The stored Markdown is
+   * exactly what the user typed.
+   *
+   * `overflow-wrap: anywhere` breaks unbroken strings (long URLs, tokens) so a
+   * single long word can never break the layout or force horizontal scroll.
+   * `white-space: pre-wrap` keeps user-entered hard breaks AND lets long lines
+   * wrap; combined with `word-break: normal` normal words are never split.
+   *
+   * Typography is driven by CSS custom properties the editor sets inline from
+   * the `story-editor-store` (font family, size, line-height, indent, measure).
+   */
+  .n87-prose-editor {
+    /* No local `--n87-editor-*` declarations here on purpose: `EditorSurface`
+       sets them inline on an ANCESTOR, and if this rule re-declared them it
+       would shadow the inherited values. Instead each property reads the var
+       with a fallback, so live typography changes cascade in correctly. */
+    font-family: var(--n87-editor-font, var(--font-serif));
+    font-size: var(--n87-editor-size, 16px);
+    line-height: var(--n87-editor-leading, 1.7);
+    max-width: var(--n87-editor-measure, 720px);
+    margin-inline: auto;
+
+    /* The core wrap behaviour (visual only). */
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: normal;
+
+    /* Long unbroken runs (URLs) wrap instead of forcing horizontal scroll. */
+    hyphens: none;
+  }
+
+  /* Paragraph rhythm inside the writing surface. */
+  .n87-prose-editor p {
+    margin: 0 0 0.85em;
+    text-indent: var(--n87-editor-indent, 0);
+  }
+  .n87-prose-editor > :first-child {
+    margin-top: 0;
+  }
+  .n87-prose-editor > :last-child {
+    margin-bottom: 0;
+  }
+  .n87-prose-editor h1,
+  .n87-prose-editor h2,
+  .n87-prose-editor h3 {
+    text-indent: 0;
+    line-height: 1.3;
+    margin: 1.1em 0 0.5em;
+  }
+  .n87-prose-editor blockquote {
+    text-indent: 0;
+    border-left: 3px solid var(--n87-border-strong);
+    padding-left: 0.9em;
+    color: var(--n87-text-muted);
+  }
 }

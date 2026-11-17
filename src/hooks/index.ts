@@ -59,5 +59,9 @@ export { useWorkspaceStats } from './use-workspace-stats';
 export type { UseWorkspaceStatsResult } from './use-workspace-stats';
 export { useWritingGoal } from './use-writing-goal';
 export type { UseWritingGoalResult } from './use-writing-goal';
+export { useChapterLinks } from './use-chapter-links';
+export type { UseChapterLinksResult, ChapterLinks, ChapterLinksStatus, LinkedEntity } from './use-chapter-links';
+export { useChapterAnalysis } from './use-chapter-analysis';
+export type { UseChapterAnalysisResult, ChapterAnalysisStatus } from './use-chapter-analysis';
 
 

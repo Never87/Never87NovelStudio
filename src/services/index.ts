@@ -31,6 +31,8 @@ import { coverService } from './cover-service';
 import { PortfolioService } from './portfolio-service';
 import { WritingGoalService } from './writing-goal-service';
 import { WritingStatsService } from './writing-stats-service';
+import { ChapterAnalysisService } from './chapter-analysis-service';
+import { ChapterAnalysisIntegrationService } from './chapter-analysis-integration-service';
 
 /**
  * Module-level application Services.
@@ -255,6 +257,36 @@ export { coverService };
  * `NovelProject.description` or `NovelProject.blurb`.
  */
 export const portfolioService = new PortfolioService();
+
+/**
+ * Chapter Analysis service (P11).
+ *
+ * Runs the AI entity-extraction pass over ONE chapter's LIVE manuscript prose
+ * and turns the result into reviewable candidate entities + relationships.
+ * Persists fingerprinted, re-runnable analysis RUNS (idempotent per content
+ * fingerprint) so re-analysing unchanged prose returns the existing run and a
+ * changed chapter produces a NEW run while KEEPING the old one as history.
+ * Relationships reference stable candidate keys; reviewed candidates are never
+ * overwritten by a re-analysis. It never writes to any project entity — this is
+ * a review surface, and integration is a separate, user-driven concern.
+ */
+export const chapterAnalysisService = new ChapterAnalysisService();
+
+/**
+ * Chapter Analysis INTEGRATION service (P11 → canonical model).
+ *
+ * The separate, user-approved bridge from accepted analysis candidates to real
+ * project entities (Characters + Knowledge Base). It reuses `characterService`
+ * and `knowledgeService` for every canonical write, performs alias-aware
+ * matching (never auto-merging), grounds evidence to the source chapter, and
+ * records a review-to-integration state that is DISTINCT from the review status.
+ * This is the only P11 component that writes project entities.
+ */
+export const chapterAnalysisIntegrationService = new ChapterAnalysisIntegrationService({
+  characterService,
+  knowledgeService,
+  worldService,
+});
 
 export { ProjectService };
 export type { CreateProjectInput, UpdateProjectInput } from './project-service';
@@ -611,4 +643,44 @@ export type {
   ProjectStatistics,
 } from './writing-stats-service';
 export type { ActivityRecorder } from './manuscript-service';
+
+/* --------------------- Chapter Analysis (P11) ------------------------ */
+
+export {
+  ChapterAnalysisService,
+  ChapterAnalysisServiceError,
+  ChapterAnalysisNotFoundError,
+  ChapterAnalysisValidationError,
+} from './chapter-analysis-service';
+export type {
+  AnalyzeChapterInput,
+  AnalyzeChapterResult,
+  AnalysisGenerateFn,
+  UpdateCandidateInput,
+  UpdateRelationshipInput,
+} from './chapter-analysis-service';
+export {
+  buildChapterAnalysisMessages,
+  parseAnalysisResponse,
+  ChapterAnalysisParseError,
+} from './chapter-analysis/prompt';
+
+/* --------------- Chapter Analysis Integration (P11 → model) -------------- */
+
+export {
+  ChapterAnalysisIntegrationService,
+  ChapterAnalysisIntegrationError,
+  ChapterAnalysisIntegrationValidationError,
+  INTEGRATION_ACTIONS,
+  canonicalTypeForKind,
+} from './chapter-analysis-integration-service';
+export type {
+  IntegrationAction,
+  IntegrationDecision,
+  CanonicalFamily,
+  CanonicalMatch,
+  CandidateIntegrationPreview,
+  CandidateIntegrationResult,
+  ApplyIntegrationResult,
+} from './chapter-analysis-integration-service';
 

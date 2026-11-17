@@ -24,6 +24,7 @@
     "verify:writing": "node scripts/p4-verify.cjs",
     "verify:writing:ui": "node scripts/p4-ui-verify.cjs",
     "verify:writing:scene:ui": "node scripts/p4-scene-ui-verify.cjs",
+    "verify:workspace:ui": "node scripts/p10-writing-workspace-ui-verify.cjs",
     "verify:ai": "node scripts/p5-verify.cjs",
     "verify:ai:ui": "node scripts/p5-ui-verify.cjs",
     "verify:prompt": "node scripts/p6-verify.cjs",
@@ -80,7 +81,10 @@
     "verify:dashboard:ui": "node scripts/p9f-dashboard-ui-verify.cjs",
     "verify:round1:browser": "node scripts/p9-round1-final-browser-verify.cjs",
     "verify:blurb:idb": "node scripts/p9d-blurb-idb-verify.cjs",
-    "verify:blurb:ui": "node scripts/p9d-blurb-ui-verify.cjs"
+    "verify:blurb:ui": "node scripts/p9d-blurb-ui-verify.cjs",
+    "verify:chapter-analysis": "node scripts/p11-chapter-analysis-verify.cjs",
+    "verify:chapter-analysis:integration": "node scripts/p11-integration-verify.cjs",
+    "verify:chapter-analysis:save-first": "node scripts/p11-save-first-verify.cjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

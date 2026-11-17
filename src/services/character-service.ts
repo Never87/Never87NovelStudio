@@ -1,7 +1,7 @@
 import { ZodError } from 'zod';
 import { createCharacterId } from '@/utils/id';
 import { now } from '@/utils/date';
-import type { Character, CharacterRole, CharacterStatus } from '@/types';
+import type { Character, CharacterRole, CharacterStatus, Evidence } from '@/types';
 import { ProjectRepositoryError, ProjectValidationError } from '@/repositories/project-repository';
 import { CharacterRepository } from '@/repositories/character-repository';
 import { ProjectServiceError } from './project-service';
@@ -17,6 +17,13 @@ export interface CreateCharacterInput {
   role?: CharacterRole;
   status?: CharacterStatus;
   tags?: string[];
+  /**
+   * Source provenance (P11 chapter-analysis integration). Optional; defaults to
+   * an empty list so every hand-authored caller is unaffected. The canonical
+   * `Character` schema requires the field, so the service always persists
+   * `evidence: input.evidence ?? []`.
+   */
+  evidence?: Evidence[];
 }
 
 /** Fields a caller may change on an existing character. Every field is optional. */
@@ -30,6 +37,12 @@ export interface UpdateCharacterInput {
   role?: CharacterRole;
   status?: CharacterStatus;
   tags?: string[];
+  /**
+   * Source provenance (P11). When supplied it REPLACES the stored evidence;
+   * omitted leaves the existing provenance untouched (never cleared implicitly,
+   * so manual evidence is never lost by an unrelated update).
+   */
+  evidence?: Evidence[];
 }
 
 /**
@@ -59,6 +72,7 @@ export class CharacterService {
       role: input.role ?? 'supporting',
       status: input.status ?? 'active',
       tags: input.tags ?? [],
+      evidence: input.evidence ?? [],
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -120,6 +134,7 @@ export class CharacterService {
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(input.tags !== undefined ? { tags: input.tags } : {}),
+      ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
       updatedAt: now(),
       // `id`, `projectId` and `createdAt` stay as they were.
     };

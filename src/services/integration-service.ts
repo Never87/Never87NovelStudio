@@ -22,6 +22,10 @@ import { ProjectRepositoryError, ProjectValidationError } from '@/repositories/p
 import { ImportService } from './import-service';
 import { evidenceStillValid } from './review-service';
 import { ProjectServiceError } from './project-service';
+import {
+  knowledgeKindForRecordKind,
+  targetKindForRecordKind,
+} from './integration/shared';
 
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                     */
@@ -221,11 +225,6 @@ export interface ApplyIntegrationInput {
 /* Pure helpers                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** Kinds that map onto a dedicated `Character` entity. */
-const CHARACTER_KINDS = new Set(['character']);
-/** Kinds that map onto a `World` section (setting / world building). */
-const WORLD_KINDS = new Set(['location', 'faction', 'rule']);
-
 /**
  * Character fields that the integration model must NOT update from an
  * extraction: `role`/`status` are never expressed by an extraction and `status`
@@ -244,15 +243,12 @@ const CHARACTER_UNSUPPORTED_FIELDS = new Set([
 
 /** The knowledge-entry kind a record is indexed as (relationship/style -- concept). */
 function knowledgeKindFor(kind: ExtractionRecord['kind']): KnowledgeEntryKind {
-  if (kind === 'relationship' || kind === 'style') return 'concept';
-  return kind as KnowledgeEntryKind;
+  return knowledgeKindForRecordKind(kind);
 }
 
-/** The target type a record routes to (pure; no I/O). */
+/** The target type a record routes to (pure; shared with P11, no I/O). */
 function targetTypeFor(kind: ExtractionRecord['kind']): IntegrationTargetType {
-  if (CHARACTER_KINDS.has(kind)) return 'character';
-  if (WORLD_KINDS.has(kind)) return 'world-section';
-  return 'knowledge-entry';
+  return targetKindForRecordKind(kind) as IntegrationTargetType;
 }
 
 /** First non-empty line, trimmed (for a list summary). */
@@ -1060,6 +1056,12 @@ export class IntegrationService {
         role: 'supporting',
         status: 'active',
         tags: resolutionTags(resolutions, record.tags.slice(0, 50)),
+        // P8 writes no per-field provenance onto a character (its evidence model
+        // is document-section oriented and lives on the extraction/knowledge
+        // entry), but the canonical schema requires the field — initialise it
+        // empty so a created character is valid and no fabricated evidence is
+        // invented.
+        evidence: [],
         createdAt: timestamp,
         updatedAt: timestamp,
       };

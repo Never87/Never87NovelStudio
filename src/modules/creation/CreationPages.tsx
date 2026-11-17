@@ -1,4 +1,5 @@
 import { Clapperboard, Compass, Globe2, ListTree, PenLine, Users } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { WorldPanel } from '@/modules/world/WorldPanel';
 import { CharactersPanel } from '@/modules/characters/CharactersPanel';
 import { NarrativePanel } from '@/modules/narrative/NarrativePanel';
@@ -81,6 +82,10 @@ export function SceneBuilderPage() {
 }
 
 export function StoryEditorPage() {
+  const [, setSearchParams] = useSearchParams();
+  const switchProject = (projectId: string) => {
+    setSearchParams(new URLSearchParams({ project: projectId }), { replace: false });
+  };
   return (
     <ProjectScopedPage
       icon={<PenLine className="size-4" />}
@@ -88,7 +93,8 @@ export function StoryEditorPage() {
       title="Story Editor"
       description="Write and autosave chapter manuscripts with version protection and AI tools."
     >
-      {(projectId) => <WritingPanel projectId={projectId} />}
+      {(projectId) => <WritingPanel projectId={projectId} onSwitchProject={switchProject} />}
     </ProjectScopedPage>
   );
 }
+

@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { FolderKanban } from 'lucide-react';
 import { ButtonLink, Card, EmptyState, PageHeader } from '@/components/ui';
 import { useProjects } from '@/hooks';
+import { useStoryEditorStore } from '@/stores/story-editor-store';
 
 export interface ProjectScopedPageProps {
   /** Page title (e.g. "World Building"). */
@@ -48,6 +49,10 @@ export function ProjectScopedPage({
   const { projects, initialLoading } = useProjects();
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get('project');
+  // Story Editor Focus Mode strips the page chrome so the writing surface fills
+  // the shell. `focusMode` is only ever true from the Story Editor (it auto-
+  // clears elsewhere), so other project-scoped modules are unaffected.
+  const focusMode = useStoryEditorStore((state) => state.focusMode);
 
   // Resolve the requested project, falling back to the first project so a
   // freshly-opened module shows real content instead of asking every time.
@@ -90,9 +95,19 @@ export function ProjectScopedPage({
       </div>
     ) : null;
 
+  // Focus Mode: hide the page chrome (header/selector/padding) so the module
+  // content fills the shell — but keep `children` at the SAME tree position so
+  // the Story Editor's editor instance is never remounted (its unmount cleanup
+  // resets focus mode, which would otherwise immediately undo the toggle).
+  const compact = focusMode && !!selectedId;
+
   return (
-    <div className="space-y-5">
-      <PageHeader icon={icon} eyebrow={eyebrow} title={title} description={description} actions={actions} toolbar={toolbar} />
+    <div className={compact ? 'h-full min-h-0' : 'space-y-5'}>
+      {/* Always rendered but hidden in Focus Mode so the children below keep
+          their tree position → the editor is never remounted when toggling. */}
+      <div className={compact ? 'hidden' : undefined}>
+        <PageHeader icon={icon} eyebrow={eyebrow} title={title} description={description} actions={actions} toolbar={toolbar} />
+      </div>
 
       {initialLoading ? (
         <Card padding="lg">
@@ -112,7 +127,7 @@ export function ProjectScopedPage({
           }
         />
       ) : selectedId ? (
-        <div>{children(selectedId)}</div>
+        <div className={compact ? 'h-full min-h-0' : undefined}>{children(selectedId)}</div>
       ) : null}
     </div>
   );
