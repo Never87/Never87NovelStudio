@@ -293,4 +293,106 @@
     padding-left: 0.9em;
     color: var(--n87-text-muted);
   }
+
+  /* ---------------------------------------------------------------------- */
+  /* Story Editor — Warm Paper appearance (scoped, editor-only)              */
+  /* ---------------------------------------------------------------------- */
+  /*
+   * `[data-editor-appearance="warm-paper"]` is applied by `EditorSurface` to
+   * the manuscript editing surface ONLY. Everything inside it re-reads the
+   * semantic `--n87-*` tokens, so remapping them HERE gives full coverage —
+   * prose text, headings, secondary text, links, inline code, blockquotes,
+   * lists, horizontal rules, selection and caret — without duplicating any
+   * component CSS. It is deliberately scoped to this subtree so the Sidebar,
+   * Topbar, Dashboard and every other route/panel keep the global Light/Dark
+   * tokens unchanged.
+   *
+   * The remap targets the *surface* semantic tokens (`bg`, `surface`,
+   * `surface-muted`, `text`, `text-muted`, `text-subtle`, `border*`, `accent*`)
+   * so the surrounding editor chrome (header, side rails) that sits on the
+   * neutral surface also blends with the paper. The fixed palette values come
+   * from the Warm Paper design tokens; contrast is verified for AA on the
+   * paper background.
+   */
+  [data-editor-appearance='warm-paper'] {
+    /* Warm Paper palette (design tokens) → semantic surface tokens. */
+    --n87-bg: #f3e9dc; /* editor background (paper) */
+    --n87-surface: #f3e9dc; /* main editing surface = paper */
+    --n87-surface-raised: #f3e9dc;
+    --n87-surface-muted: #e9d8c5; /* secondary surface */
+
+    --n87-text: #493d35; /* primary text (AA on #f3e9dc) */
+    --n87-text-muted: #6f5d50; /* secondary text, darkened from #806b5c for AA */
+    --n87-text-subtle: #806b5c; /* tertiary text (design token) */
+
+    --n87-border: #d8c7b5; /* subtle border */
+    --n87-border-strong: #c9b5a0;
+
+    --n87-accent: #8f6356; /* accent, darkened from #a77d70 for text/AA contrast */
+    --n87-accent-hover: #7f5649;
+    --n87-accent-soft: #e9d8c5; /* soft accent wash on paper */
+    --n87-accent-soft-text: #6b4a3e;
+    --n87-accent-ring: #cdb09e;
+
+    /* The paper itself is the editor background. */
+    background-color: var(--n87-bg);
+  }
+
+  /* Selection + caret inside the paper surface. */
+  [data-editor-appearance='warm-paper'] ::selection {
+    background: #dcc3ad;
+    color: #3f342d;
+  }
+  [data-editor-appearance='warm-paper'] .ProseMirror {
+    caret-color: #493d35; /* always-visible caret on the cream surface */
+    outline: none;
+  }
+
+  /* Prose elements inside the paper surface read the remapped tokens. */
+  [data-editor-appearance='warm-paper'] .n87-prose-editor a {
+    color: var(--n87-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor code {
+    background: var(--n87-surface-muted);
+    color: var(--n87-text);
+    border: 1px solid var(--n87-border);
+    border-radius: 4px;
+    padding: 0.05em 0.3em;
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor pre {
+    background: var(--n87-surface-muted);
+    color: var(--n87-text);
+    border: 1px solid var(--n87-border);
+    border-radius: 6px;
+    padding: 0.7em 0.9em;
+    overflow-x: auto;
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor pre code {
+    background: transparent;
+    border: 0;
+    padding: 0;
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor blockquote {
+    border-left: 3px solid var(--n87-border-strong);
+    color: var(--n87-text-muted);
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor hr {
+    border: 0;
+    border-top: 1px solid var(--n87-border-strong);
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor ul,
+  [data-editor-appearance='warm-paper'] .n87-prose-editor ol {
+    color: var(--n87-text);
+  }
+  [data-editor-appearance='warm-paper'] .n87-prose-editor ::marker {
+    color: var(--n87-text-subtle);
+  }
+  /* ~18% wash keeps current-paragraph focus visible without a heavy highlight. */
+  [data-editor-appearance='warm-paper'] .n87-prose-editor .ProseMirror-focused {
+    box-shadow: inset 0 0 0 1px transparent;
+  }
 }

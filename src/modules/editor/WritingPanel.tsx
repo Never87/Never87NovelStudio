@@ -438,6 +438,7 @@ function ChapterEditorSurface({
   const { document, status, error, autosave, onChange, saveNow, flushBeforeAnalysis, retry, reload, createVersion, restoreVersion } =
     useChapterEditor(projectId, chapterId);
   const typography = useStoryEditorStore((s) => s.typography);
+  const editorAppearance = useStoryEditorStore((s) => s.editorAppearance);
   const focusMode = useStoryEditorStore((s) => s.focusMode);
   const aiCollapsed = useStoryEditorStore((s) => s.aiCollapsed);
   const aiWidth = useStoryEditorStore((s) => s.aiWidth);
@@ -589,7 +590,7 @@ function ChapterEditorSurface({
 
       <div className="flex min-h-0 flex-1">
         {/* Center writing surface — always present; typography applied here. */}
-        <EditorSurface typography={typography} className="min-h-0 min-w-0 flex-1">
+        <EditorSurface typography={typography} appearance={editorAppearance} className="min-h-0 min-w-0 flex-1">
           <MarkdownEditor
             key={`${chapterId}:${document.draft.revision === 0 ? 'new' : 'open'}`}
             editorKey={document.draft.id}

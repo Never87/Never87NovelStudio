@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { EditorTypography } from '@/stores/story-editor-store';
+import type { EditorAppearance, EditorTypography } from '@/stores/story-editor-store';
 import { cn } from '@/utils/cn';
 
 /**
@@ -28,11 +28,13 @@ const LINE_HEIGHTS: Record<EditorTypography['lineHeight'], number> = {
 
 export interface EditorSurfaceProps {
   typography: EditorTypography;
+  /** Writing-surface appearance; drives the scoped Warm Paper token remap. */
+  appearance?: EditorAppearance;
   children: ReactNode;
   className?: string;
 }
 
-export function EditorSurface({ typography, children, className }: EditorSurfaceProps) {
+export function EditorSurface({ typography, appearance = 'default', children, className }: EditorSurfaceProps) {
   const style: CSSProperties = {
     // Cast: CSS custom properties are not in React's typed CSSProperties.
     ['--n87-editor-font' as string]: FONT_STACKS[typography.fontFamily],
@@ -43,7 +45,11 @@ export function EditorSurface({ typography, children, className }: EditorSurface
   };
 
   return (
-    <div style={style} className={cn('flex min-h-0 flex-col', className)}>
+    <div
+      data-editor-appearance={appearance}
+      style={style}
+      className={cn('n87-editor-surface flex min-h-0 flex-col', className)}
+    >
       {children}
     </div>
   );

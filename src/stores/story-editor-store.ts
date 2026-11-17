@@ -27,6 +27,23 @@ export type EditorLineHeight = (typeof EDITOR_LINE_HEIGHTS)[number];
 export const EDITOR_INDENTS = ['none', 'first'] as const;
 export type EditorIndent = (typeof EDITOR_INDENTS)[number];
 
+/**
+ * Story Editor writing-surface appearance.
+ *
+ *   - `default`    → inherits the current app surface (light or dark). This is
+ *                    the DEFAULT so every existing user keeps today's look; the
+ *                    stored value is absent for them and resolves to this.
+ *   - `warm-paper` → a soft, low-saturation warm beige/cream paper surface that
+ *                    is scoped to the manuscript editing/reading area ONLY. It
+ *                    never touches the Sidebar, Topbar, Dashboard or other pages.
+ *
+ * Independent of the application-wide Light/Dark theme (`core/theme/theme.ts`),
+ * so switching Light/Dark keeps the editor appearance, and vice versa.
+ */
+export const EDITOR_APPEARANCES = ['default', 'warm-paper'] as const;
+export type EditorAppearance = (typeof EDITOR_APPEARANCES)[number];
+export const DEFAULT_EDITOR_APPEARANCE: EditorAppearance = 'default';
+
 export interface EditorTypography {
   fontFamily: EditorFontFamily;
   /** Base font size in px (13–24). */
@@ -69,6 +86,10 @@ interface StoryEditorState {
   setAiWidth: (width: number) => void;
   updateTypography: (patch: Partial<EditorTypography>) => void;
   resetTypography: () => void;
+
+  /** Writing-surface appearance (independent of the global Light/Dark theme). */
+  editorAppearance: EditorAppearance;
+  setEditorAppearance: (value: EditorAppearance) => void;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -102,6 +123,9 @@ export const useStoryEditorStore = create<StoryEditorState>()(
           return { typography: next };
         }),
       resetTypography: () => set({ typography: { ...DEFAULT_TYPOGRAPHY } }),
+
+      editorAppearance: DEFAULT_EDITOR_APPEARANCE,
+      setEditorAppearance: (editorAppearance) => set({ editorAppearance }),
     }),
     {
       name: 'n87-story-editor',
@@ -112,7 +136,18 @@ export const useStoryEditorStore = create<StoryEditorState>()(
         manuscriptWidth: state.manuscriptWidth,
         aiWidth: state.aiWidth,
         typography: state.typography,
+        editorAppearance: state.editorAppearance,
       }),
+      // Persisted state from BEFORE this field existed has no `editorAppearance`.
+      // Merge the defaults in so old users resolve to `default` (today's look)
+      // instead of `undefined` — never resetting their other preferences.
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as Partial<StoryEditorState>) };
+        if (!EDITOR_APPEARANCES.includes(merged.editorAppearance)) {
+          merged.editorAppearance = DEFAULT_EDITOR_APPEARANCE;
+        }
+        return merged;
+      },
     },
   ),
 );

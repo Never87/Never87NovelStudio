@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Type } from 'lucide-react';
+import { Check, Palette } from 'lucide-react';
 import { Button, IconButton } from '@/components/ui';
 import {
   useStoryEditorStore,
+  type EditorAppearance,
   type EditorFontFamily,
   type EditorIndent,
   type EditorLineHeight,
@@ -35,10 +36,17 @@ const INDENT_OPTIONS: Array<{ id: EditorIndent; label: string }> = [
   { id: 'first', label: 'First-line' },
 ];
 
+const APPEARANCE_OPTIONS: Array<{ id: EditorAppearance; label: string }> = [
+  { id: 'default', label: 'Default' },
+  { id: 'warm-paper', label: 'Warm Paper' },
+];
+
 export function TypographyMenu() {
   const typography = useStoryEditorStore((state) => state.typography);
   const updateTypography = useStoryEditorStore((state) => state.updateTypography);
   const resetTypography = useStoryEditorStore((state) => state.resetTypography);
+  const editorAppearance = useStoryEditorStore((state) => state.editorAppearance);
+  const setEditorAppearance = useStoryEditorStore((state) => state.setEditorAppearance);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -61,16 +69,23 @@ export function TypographyMenu() {
   return (
     <div ref={ref} className="relative">
       <IconButton
-        label="Editor typography"
-        icon={<Type className="size-3.5" aria-hidden />}
+        label="Editor appearance and typography"
+        icon={<Palette className="size-3.5" aria-hidden />}
         onClick={() => setOpen((value) => !value)}
       />
       {open ? (
         <div
           role="dialog"
-          aria-label="Editor typography"
+          aria-label="Editor appearance and typography"
           className="bg-surface shadow-[var(--n87-shadow-popover)] absolute right-0 top-9 z-40 w-64 space-y-3 rounded-lg border border-line p-3"
         >
+          <Segmented
+            label="Appearance"
+            options={APPEARANCE_OPTIONS}
+            value={editorAppearance}
+            onChange={setEditorAppearance}
+          />
+
           <Segmented
             label="Font"
             options={FONT_OPTIONS}

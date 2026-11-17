@@ -1,7 +1,8 @@
-import { Monitor, Moon, PenLine, Sun, Timer } from 'lucide-react';
+import { Monitor, Moon, Palette, PenLine, Sun, Timer } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge, Card, CardHeader, PageHeader } from '@/components/ui';
 import { setThemeMode, useThemeMode, type ThemeMode } from '@/core/theme/theme';
+import { useStoryEditorStore, type EditorAppearance } from '@/stores/story-editor-store';
 import { cn } from '@/utils/cn';
 
 /**
@@ -17,6 +18,8 @@ import { cn } from '@/utils/cn';
  */
 export function EditorSettingsPage() {
   const themeMode = useThemeMode();
+  const editorAppearance = useStoryEditorStore((state) => state.editorAppearance);
+  const setEditorAppearance = useStoryEditorStore((state) => state.setEditorAppearance);
 
   return (
     <div className="space-y-5">
@@ -28,7 +31,34 @@ export function EditorSettingsPage() {
       />
 
       <Card padding="md">
-        <CardHeader title="Editor appearance" description="Theme applies to the editor as well as the rest of the app" icon={<Sun className="size-4" />} />
+        <CardHeader title="Editor appearance" description="The look of the manuscript writing surface, independent of the app theme" icon={<Palette className="size-4" />} />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <AppearanceOption
+            label="Default"
+            description="Follows the app Light / Dark theme."
+            value="default"
+            current={editorAppearance}
+            onSelect={setEditorAppearance}
+            swatch="#ffffff"
+            swatchInk="#1a2233"
+          />
+          <AppearanceOption
+            label="Warm Paper"
+            description="A soft cream paper surface, only in the editor."
+            value="warm-paper"
+            current={editorAppearance}
+            onSelect={setEditorAppearance}
+            swatch="#f3e9dc"
+            swatchInk="#493d35"
+          />
+        </div>
+        <p className="text-subtle mt-3 text-2xs">
+          Applies to the manuscript editing and reading area only — the Sidebar, Topbar and other pages keep your app theme.
+        </p>
+      </Card>
+
+      <Card padding="md">
+        <CardHeader title="App theme" description="Light / Dark for the whole application" icon={<Sun className="size-4" />} />
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <ThemeOption label="Light" value="light" current={themeMode} onSelect={setThemeMode} icon={<Sun className="size-4" />} />
           <ThemeOption label="Dark" value="dark" current={themeMode} onSelect={setThemeMode} icon={<Moon className="size-4" />} />
@@ -106,6 +136,54 @@ function ThemeOption({
       {icon}
       <span className="font-medium">{label}</span>
       {selected ? <span className="ml-auto text-2xs">Selected</span> : null}
+    </button>
+  );
+}
+
+function AppearanceOption({
+  label,
+  description,
+  value,
+  current,
+  onSelect,
+  swatch,
+  swatchInk,
+}: {
+  label: string;
+  description: string;
+  value: EditorAppearance;
+  current: EditorAppearance;
+  onSelect: (value: EditorAppearance) => void;
+  /** Preview swatch background (paper colour). */
+  swatch: string;
+  /** Preview swatch text colour. */
+  swatchInk: string;
+}) {
+  const selected = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      aria-pressed={selected}
+      className={cn(
+        'flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors',
+        selected
+          ? 'border-accent bg-accent-soft text-accent-soft-text'
+          : 'border-line text-muted hover:bg-surface-muted hover:text-ink',
+      )}
+    >
+      <span
+        aria-hidden
+        className="grid size-9 shrink-0 place-items-center rounded-md border border-line text-[13px] font-semibold"
+        style={{ backgroundColor: swatch, color: swatchInk }}
+      >
+        Aa
+      </span>
+      <span className="min-w-0">
+        <span className="block font-medium">{label}</span>
+        <span className="text-subtle block text-2xs">{description}</span>
+      </span>
+      {selected ? <span className="ml-auto shrink-0 text-2xs">Selected</span> : null}
     </button>
   );
 }
